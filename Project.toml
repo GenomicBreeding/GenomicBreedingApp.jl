@@ -1,0 +1,9 @@
+[deps]
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DotEnv = "4dc1fcf4-5e3b-5448-94ab-0c38ec0385c1"
+GenieFramework = "a59fdf5c-6bf0-4f5d-949c-a137c9e2f353"
+LibPQ = "194296ae-ab2e-5f79-8cd4-7183a0a5a0d1"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+
+[compat]
+GenieFramework = "2.1.1"
