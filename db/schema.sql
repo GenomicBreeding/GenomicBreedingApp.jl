@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS reference_genomes (
 CREATE TABLE IF NOT EXISTS entries (
     id SERIAL PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,
+    population TEXT,
     description TEXT
 );
 
@@ -51,11 +52,10 @@ CREATE TABLE IF NOT EXISTS trials (
     season TEXT,
     harvest TEXT,
     site TEXT,
-    treatment TEXT,
     block TEXT,
-    row INT,
-    col INT,
-    replication INT
+    row TEXT,
+    col TEXT,
+    replication TEXT
 );
 
 -- Phenotype measurements
@@ -91,8 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_variant_position ON variants (reference_genome_id
 CREATE INDEX IF NOT EXISTS idx_phenotype_entry_trait_trial ON phenotype_data (entry_id, trait_id, trial_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_tag_lookup ON analysis_tags (analysis_id, entry_id, trait_id);
 
--- Materialized View (Example: Average value per trait-entry-trial)
--- CREATE MATERIALIZED VIEW trait_means AS
--- SELECT entry_id, trait_id, trial_id, AVG(value) as avg_value
--- FROM phenotype_data
--- GROUP BY entry_id, trait_id, trial_id;
+-- Add constraints for inserting data
+ALTER TABLE entries ADD CONSTRAINT unique_entry_instance UNIQUE (name);
+ALTER TABLE trials ADD CONSTRAINT unique_trial_instance UNIQUE (year, season, harvest, site, block, row, col, replication);
+ALTER TABLE phenotype_data ADD CONSTRAINT unique_phenotype_measurement UNIQUE (entry_id, trait_id, trial_id);
