@@ -9,9 +9,6 @@ using GenomicBreedingCore, GenomicBreedingIO
 # Load configurations
 DotEnv.load!(joinpath(homedir(), ".env"))
 
-# Database connection
-# $ pg_ctl -D $CONDA_PREFIX/pgsql_data start
-
 # Connect to database
 function dbconnect()
     db_user = ENV["DB_USER"];

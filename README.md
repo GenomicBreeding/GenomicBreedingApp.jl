@@ -35,14 +35,18 @@ Open your browser and navigate to http://localhost:8001/
 ### 1. Install PostgreSQL via conda and start the server
 
 ```shell
-conda install anaconda::postgresql
-pg_ctl -D $CONDA_PREFIX/pgsql_data start
+# conda install anaconda::postgresql
+# pg_ctl -D $CONDA_PREFIX/pgsql_data start
+sudo apt install postgresql -y
+initdb -D ${HOME}/db
+pg_ctl -D ${HOME}/db -l logfile start &
+pg_ctl -D ${HOME}/db status
 ```
 
 ### 2. Instantiate the database
 
 ```sql
-psql postgres
+sudo -u postgres psql template1
 CREATE DATABASE gbdb;
 \l
 \c gbdb
@@ -65,6 +69,12 @@ DB_HOST="localhost"
 ls -lhtr $CONDA_PREFIX/pgsql_data/
 cat $CONDA_PREFIX/pgsql_data/pg_hba.conf
 
+```
+
+### 4. Add extensions
+
+```shell
+sudo apt install postgresql-contrib
 ```
 
 </details>

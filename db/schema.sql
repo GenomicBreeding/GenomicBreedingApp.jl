@@ -95,3 +95,6 @@ CREATE INDEX IF NOT EXISTS idx_analysis_tag_lookup ON analysis_tags (analysis_id
 ALTER TABLE entries ADD CONSTRAINT unique_entry_instance UNIQUE (name);
 ALTER TABLE trials ADD CONSTRAINT unique_trial_instance UNIQUE (year, season, harvest, site, block, row, col, replication);
 ALTER TABLE phenotype_data ADD CONSTRAINT unique_phenotype_measurement UNIQUE (entry_id, trait_id, trial_id);
+
+-- Add extensions
+CREATE EXTENSION pg_trgm; -- fuzzy matching
