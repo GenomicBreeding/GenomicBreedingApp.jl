@@ -12,7 +12,7 @@ julia --project -e 'using Pkg; Pkg.instantiate()'
 ## Open the app in julia
 
 ```shell
-julia --project -e
+julia --project
 ```
 
 ```julia
@@ -37,16 +37,35 @@ Open your browser and navigate to http://localhost:8001/
 ```shell
 # conda install anaconda::postgresql
 # pg_ctl -D $CONDA_PREFIX/pgsql_data start
-sudo apt install postgresql -y
-initdb -D ${HOME}/db
-pg_ctl -D ${HOME}/db -l logfile start &
-pg_ctl -D ${HOME}/db status
+sudo apt install postgresql postgresql-common postgresql-contrib
+sudo systemctl start postgresql.service
+# sudo nano /etc/postgresql/*/main/postgresql.conf # --> set: `listen_addresses = '*'` and `port = 5432`
+sudo systemctl restart postgresql.service
+sudo -u postgres psql
+# # MISC
+# # sudo systemctl start postgresql
+# # sudo systemctl enable postgresql
+# # sudo ufw allow 5432/tcp
+# # sudo -u postgres psql
+# # sudo systemctl start postgresql.service
+# # sudo systemctl restart postgresql.service
+# # sudo -i -u postgres
+# # initdb -D ${HOME}/db
+# # pg_ctl -D ${HOME}/db -l logfile start &
+# # pg_ctl -D ${HOME}/db status
 ```
 
 ### 2. Instantiate the database
 
+Open the PostgreSQL shell:
+
+```shell
+sudo -u postgres psql
+```
+
+Create a new database:
+
 ```sql
-sudo -u postgres psql template1
 CREATE DATABASE gbdb;
 \l
 \c gbdb

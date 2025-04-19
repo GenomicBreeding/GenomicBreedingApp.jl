@@ -1,10 +1,9 @@
 module GenomicBreedingApp
 
-using DotEnv, LibPQ
+using DotEnv, LibPQ, Tables
 using GenieFramework
 using DataFrames, StatsBase
 using GenomicBreedingCore, GenomicBreedingIO
-@genietools
 
 # Load configurations
 DotEnv.load!(joinpath(homedir(), ".env"))
@@ -33,11 +32,21 @@ function dbinit(schema_path::String = "db/schema.sql")
     close(conn)
 end
 
-function uploadtrials(; fname::String, sep::String = "\t", verbose::Bool = false)
+function uploadtrials(; 
+    fname::String,
+    species::String = "unspecified",
+    classification::Union{Missing, String} = missing,
+    description::Union{Missing, String} = missing,
+    sep::String = "\t",
+    verbose::Bool = false
+)::Nothing
     # genomes = GenomicBreedingCore.simulategenomes(n=10, verbose=false);
     # trials, _ = GenomicBreedingCore.simulatetrials(genomes=genomes, verbose=false);
     # trials.years = replace.(trials.years, "year_" => "202")
     # fname = writedelimited(trials); sep = "\t"; verbose = true;
+    # species = "unspecified"
+    # classification = missing
+    # description = missing
     trials = try
         readdelimited(Trials, fname=fname, sep=sep, verbose=verbose)
     catch
@@ -47,62 +56,83 @@ function uploadtrials(; fname::String, sep::String = "\t", verbose::Bool = false
     expression = """
         WITH 
             entry AS (
-                INSERT INTO entries (name, population) 
-                VALUES (\$1, \$2)
-                ON CONFLICT (name) 
+                INSERT INTO entries (name, population, species, classification, description)
+                VALUES (\$1, \$2, \$3, \$4, \$5)
+                ON CONFLICT (name, species) 
                 DO UPDATE SET name = EXCLUDED.name
                 RETURNING id
             ),
             trial AS (
                 INSERT INTO trials (year, season, harvest, site, block, row, col, replication)
-                VALUES (\$3, \$4, \$5, \$6, \$7, \$8, \$9, \$10)
+                VALUES (\$6, \$7, \$8, \$9, \$10, \$11, \$12, \$13)
                 ON CONFLICT (year, season, harvest, site, block, row, col, replication)
                 DO UPDATE SET year = EXCLUDED.year
                 RETURNING id
             ),
             trait AS (
                 INSERT INTO traits (name) 
-                VALUES (\$11)
+                VALUES (\$14)
                 ON CONFLICT (name) 
                 DO UPDATE SET name = EXCLUDED.name
                 RETURNING id
             )
         INSERT INTO phenotype_data (entry_id, trial_id, trait_id, value)
-        SELECT entry.id, trial.id, trait.id, \$12
+        SELECT entry.id, trial.id, trait.id, \$15
         FROM entry, trial, trait
         ON CONFLICT (entry_id, trial_id, trait_id)
         DO NOTHING
     """
     conn = dbconnect()
+    execute(conn, "BEGIN;")
     traits = names(df)[12:end]
     for trait in traits
         # trait = traits[1]
         for i in 1:nrow(df)
             # i = 1
+            year = try
+                parse(Int64, df.years[i])
+            catch
+                throw(ArgumentError("The year in line $i, i.e. `$(df.years[i])` cannot be parsed into Int64."))
+            end
             input = [
-                df.entries[i], df.populations[i], 
-                parse(Int64, df.years[i]), df.seasons[i], df.harvests[i], df.sites[i], df.blocks[i], df.rows[i], df.cols[i], df.replications[i],
+                df.entries[i], df.populations[i], species, classification, description,
+                year, df.seasons[i], df.harvests[i], df.sites[i], df.blocks[i], df.rows[i], df.cols[i], df.replications[i],
                 trait, df[i, trait],
             ]
             res = execute(conn, expression, input)
         end
+    end
+    println("To commit please leave empty. To rollback enter any key:")
+    commit_else_rollback = readline()
+    if commit_else_rollback == ""
+        execute(conn, "COMMIT;")
+    else
+        execute(conn, "ROLLBACK;")
     end
     close(conn)
 end
 
 function uploadphenomes(; 
     fname::String,
+    species::String = "unspecified",
+    classification::Union{Missing, String} = missing,
+    description::Union{Missing, String} = missing,
     year::Union{Missing, Int64} = missing,
     season::Union{Missing, String} = missing, 
     harvest::Union{Missing, String} = missing, 
     site::Union{Missing, String} = missing, 
-    sep::String = "\t", verbose::Bool = false)
+    sep::String = "\t", 
+    verbose::Bool = false
+)::Nothing
     # genomes = GenomicBreedingCore.simulategenomes(n=10, verbose=false);
     # trials, _ = GenomicBreedingCore.simulatetrials(genomes=genomes, verbose=false);
     # trials.years = replace.(trials.years, "year_" => "202")
     # tebv = analyse(trials, "y ~ 1|entries")
     # phenomes = merge(merge(tebv.phenomes[1], tebv.phenomes[2]), tebv.phenomes[3])
     # fname = writedelimited(phenomes); sep = "\t"; verbose = true;
+    # species = "unspecified"
+    # classification = missing
+    # description = missing
     # year = missing; season = missing; harvest = missing; site = missing;
     phenomes = try
         readdelimited(Phenomes, fname=fname, sep=sep, verbose=verbose)
@@ -113,28 +143,28 @@ function uploadphenomes(;
     expression = """
         WITH 
             entry AS (
-                INSERT INTO entries (name, population) 
-                VALUES (\$1, \$2)
-                ON CONFLICT (name) 
+                INSERT INTO entries (name, population, species, classification, description) 
+                VALUES (\$1, \$2, \$3, \$4, \$5)
+                ON CONFLICT (name, species) 
                 DO UPDATE SET name = EXCLUDED.name
                 RETURNING id
             ),
             trial AS (
                 INSERT INTO trials (year, season, harvest, site) -- excludes: block, row, col, replication
-                VALUES (\$3, \$4, \$5, \$6)
+                VALUES (\$6, \$7, \$8, \$9)
                 ON CONFLICT (year, season, harvest, site, block, row, col, replication)
                 DO UPDATE SET year = EXCLUDED.year
                 RETURNING id
             ),
             trait AS (
                 INSERT INTO traits (name) 
-                VALUES (\$7)
+                VALUES (\$10)
                 ON CONFLICT (name) 
                 DO UPDATE SET name = EXCLUDED.name
                 RETURNING id
             )
         INSERT INTO phenotype_data (entry_id, trial_id, trait_id, value)
-        SELECT entry.id, trial.id, trait.id, \$8
+        SELECT entry.id, trial.id, trait.id, \$11
         FROM entry, trial, trait
         ON CONFLICT (entry_id, trial_id, trait_id)
         DO NOTHING
@@ -146,7 +176,7 @@ function uploadphenomes(;
         for i in 1:nrow(df)
             # i = 1
             input = [
-                df.entries[i], df.populations[i], 
+                df.entries[i], df.populations[i], species, classification, description,
                 year, season, harvest, site,
                 trait, df[i, trait],
             ]
@@ -162,65 +192,123 @@ end
 # TODO TODO TODO TODO TODO TODO TODO TODO TODO
 # TODO TODO TODO TODO TODO TODO TODO TODO TODO
 
-function querytrialsandphenomes()
+function querytrialsandphenomes()::Nothing
     expression = """
         SELECT
-            pd.value,          -- The phenotype measurement
-            t.name AS trait_name, -- Name of the trait
-            e.name AS entry_name,  -- Name of the genetic entry
-            e.population,      -- Population of the entry
-            tr.year,           -- Trial year
-            tr.season,         -- Trial season
-            tr.harvest,        -- Trial harvest
-            tr.site,           -- Trial site
-            tr.block,          -- Other trial details you might want
-            tr.row,
-            tr.col,
-            tr.replication
+            en.name AS entry_name,
+            en.population,
+            en.species,
+            en.classification,
+            tl.year,
+            tl.season,
+            tl.harvest,
+            tl.site,
+            tl.block,
+            tl.row,
+            tl.col,
+            tl.replication,
+            -- Use conditional aggregation to pivot traits into columns
+            MAX(CASE WHEN tt.name = 'trait_1' THEN ys.value END) AS trait_1,
+            MAX(CASE WHEN tt.name = 'trait_2' THEN ys.value END) AS trait_2,
+            MAX(CASE WHEN tt.name = 'trait_3' THEN ys.value END) AS trait_3
         FROM
-            phenotype_data pd
+            phenotype_data ys
         JOIN
-            entries e ON pd.entry_id = e.id
+            entries en ON ys.entry_id = en.id
         JOIN
-            traits t ON pd.trait_id = t.id -- Join to get trait names
+            traits tt ON ys.trait_id = tt.id
         JOIN
-            trials tr ON pd.trial_id = tr.id
+            trials tl ON ys.trial_id = tl.id
         WHERE
-            -- Add your filtering conditions here, combined with AND
-            -- You can uncomment and modify the examples below
-
-            -- Filter by one or more years (use IN for multiple specific years)
-            -- tr.year IN (2023, 2024)
-            -- OR filter by a range of years (inclusive)
-            -- tr.year BETWEEN 2020 AND 2025
-
-            -- Filter by one or more seasons
-            -- AND tr.season IN ('Spring', 'Autumn')
-
-            -- Filter by one or more harvests
-            -- AND tr.harvest IN ('Main', 'Ratoon')
-
-            -- Filter by one or more sites
-            -- AND tr.site IN ('SiteA', 'SiteB', 'SiteC')
-
-            -- Filter by one or more entry names
-            -- AND e.name IN ('HybridX', 'VarietyY')
-
-            -- Filter by one or more populations
-            -- AND e.population IN ('Elite', 'Breeding Pool')
-
-            -- You can also filter by specific traits
-            -- AND t.name = 'Yield'
-            -- AND t.name IN ('Yield', 'Height', 'Flowering Time')
-
-            -- Example combining multiple filters:
-            -- tr.year = 2024
-            -- AND tr.site = 'SiteA'
-            -- AND e.population IN ('Elite', 'Advanced')
-            -- AND t.name = 'Yield'
-   """ 
+            -- Filters
+            (
+                en.name % 'entry'
+                OR
+                en.name = 'entry'
+            )
+            AND (
+                en.population % 'pop'
+                OR
+                en.population = 'pop'
+            )
+            AND (
+                en.species % 'unspecified'
+                OR
+                en.species = 'unspecified'
+            )
+            AND (
+                en.classification % 'some_class'
+                OR
+                en.classification IS NULL
+            )
+            AND (
+                tl.year IN (2022, 2023)
+                OR
+                tl.year BETWEEN 2022 AND 2025
+            )
+            AND (
+                tl.season % (\$1)
+                OR
+                tl.season = (\$1)
+            )
+            AND (
+                tl.harvest % 'harvest'
+                OR
+                tl.harvest IS NULL
+            )
+            AND (
+                tl.site % 'site'
+                OR
+                tl.site IS NULL
+            )
+            AND (
+                tl.block % 'block'
+                OR
+                tl.block IS NULL
+            )
+            AND (
+                tl.row % 'row'
+                OR
+                tl.row IS NULL
+            )
+            AND (
+                tl.col % 'col'
+                OR
+                tl.col IS NULL
+            )
+            AND (
+                tl.replication % 'replication'
+                OR
+                tl.replication IS NULL
+            )
+        GROUP BY
+            -- Group by all the non-aggregated columns that define a unique output row
+            en.name,
+            en.population,
+            en.species,
+            en.classification,
+            tl.year,
+            tl.season,
+            tl.harvest,
+            tl.site,
+            tl.block,
+            tl.row,
+            tl.col,
+            tl.replication
+        ORDER BY -- Optional: Define how you want the results sorted
+            en.name, tl.year, tl.site;
+    """
+    conn = dbconnect()
+    res = execute(conn, expression, ["season_1"])
+    out = columntable(res)
+    if verbose
+        @show string.(keys(out))
+        @show Tables.matrix(out)
+    end
+    close(conn)
 end
 
+@genietools
 
 @app begin
     @in tab_selected = "search_and_download"
