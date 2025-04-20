@@ -37,6 +37,8 @@ function uploadtrials(;
     species::String = "unspecified",
     classification::Union{Missing, String} = missing,
     description::Union{Missing, String} = missing,
+    analysis_name::Union{Missing, String} = missing,
+    analysis_description::Union{Missing, String} = missing,
     sep::String = "\t",
     verbose::Bool = false
 )::Nothing
@@ -47,6 +49,7 @@ function uploadtrials(;
     # species = "unspecified"
     # classification = missing
     # description = missing
+    # analysis_name = missing
     trials = try
         readdelimited(Trials, fname=fname, sep=sep, verbose=verbose)
     catch
@@ -54,7 +57,7 @@ function uploadtrials(;
     end
     df = tabularise(trials)
     expression = """
-        WITH 
+        WITH
             entry AS (
                 INSERT INTO entries (name, population, species, classification, description)
                 VALUES (\$1, \$2, \$3, \$4, \$5)
@@ -62,26 +65,71 @@ function uploadtrials(;
                 DO UPDATE SET name = EXCLUDED.name
                 RETURNING id
             ),
-            trial AS (
-                INSERT INTO trials (year, season, harvest, site, block, row, col, replication)
-                VALUES (\$6, \$7, \$8, \$9, \$10, \$11, \$12, \$13)
-                ON CONFLICT (year, season, harvest, site, block, row, col, replication)
-                DO UPDATE SET year = EXCLUDED.year
-                RETURNING id
-            ),
             trait AS (
-                INSERT INTO traits (name) 
-                VALUES (\$14)
+                INSERT INTO traits (name, description) 
+                VALUES (\$6, \$7)
                 ON CONFLICT (name) 
                 DO UPDATE SET name = EXCLUDED.name
                 RETURNING id
+            ),
+            trial AS (
+                INSERT INTO trials (year, season, harvest, site, treatment, description)
+                VALUES (\$8, \$9, \$10, \$11, \$12, \$13)
+                ON CONFLICT (year, season, harvest, site, treatment)
+                DO UPDATE SET year = EXCLUDED.year
+                RETURNING id
+            ),
+            layout AS (
+                INSERT INTO layouts (replication, block, row, col)
+                VALUES (\$14, \$15, \$16, \$17)
+                ON CONFLICT (replication, block, row, col)
+                DO UPDATE SET replication = EXCLUDED.replication
+                RETURNING id
             )
-        INSERT INTO phenotype_data (entry_id, trial_id, trait_id, value)
-        SELECT entry.id, trial.id, trait.id, \$15
-        FROM entry, trial, trait
-        ON CONFLICT (entry_id, trial_id, trait_id)
+        INSERT INTO phenotype_data (entry_id, trait_id, trial_id, layout_id, value)
+        SELECT entry.id, trait.id, trial.id, layout.id, \$18
+        FROM entry, trait, trial, layout
+        ON CONFLICT (entry_id, trait_id, trial_id, layout_id)
         DO NOTHING
     """
+    # expression_add_tag = if !ismissing(analysis_name)
+    #     """
+    #         WITH 
+    #             entry AS (
+    #                 INSERT INTO entries (name, population, species, classification, description)
+    #                 VALUES (\$1, \$2, \$3, \$4, \$5)
+    #                 ON CONFLICT (name, species) 
+    #                 DO UPDATE SET name = EXCLUDED.name
+    #                 RETURNING id
+    #             ),
+    #             trial AS (
+    #                 INSERT INTO trials (year, season, harvest, site, block, row, col, replication)
+    #                 VALUES (\$6, \$7, \$8, \$9, \$10, \$11, \$12, \$13)
+    #                 ON CONFLICT (year, season, harvest, site, block, row, col, replication)
+    #                 DO UPDATE SET year = EXCLUDED.year
+    #                 RETURNING id
+    #             ),
+    #             trait AS (
+    #                 INSERT INTO traits (name) 
+    #                 VALUES (\$14)
+    #                 ON CONFLICT (name) 
+    #                 DO UPDATE SET name = EXCLUDED.name
+    #                 RETURNING id
+    #             ),
+    #             analysis AS (
+    #                 INSERT INTO traits (name) 
+    #                 VALUES (\$14)
+    #                 ON CONFLICT (name) 
+    #                 DO UPDATE SET name = EXCLUDED.name
+    #                 RETURNING id
+    #             )
+    #         INSERT INTO analysis_tags (analysis_id, entry_id, trial_id, trait_id)
+    #         SELECT \$15, entry.id, trial.id, trait.id
+    #         FROM entry, trial, trait
+    #         ON CONFLICT (analysis_id, entry_id, trial_id, trait_id)
+    #         DO NOTHING
+    #     """
+    # end
     conn = dbconnect()
     execute(conn, "BEGIN;")
     traits = names(df)[12:end]
@@ -100,6 +148,9 @@ function uploadtrials(;
                 trait, df[i, trait],
             ]
             res = execute(conn, expression, input)
+            if !ismissing(analysis_name)
+                execute(conn, expression_add_tag, vcat(input[1:(end-1)], analysis_name))
+            end
         end
     end
     println("To commit please leave empty. To rollback enter any key:")
@@ -121,6 +172,7 @@ function uploadphenomes(;
     season::Union{Missing, String} = missing, 
     harvest::Union{Missing, String} = missing, 
     site::Union{Missing, String} = missing, 
+    analysis_tag::Union{Missing, String} = missing,
     sep::String = "\t", 
     verbose::Bool = false
 )::Nothing
@@ -192,13 +244,44 @@ end
 # TODO TODO TODO TODO TODO TODO TODO TODO TODO
 # TODO TODO TODO TODO TODO TODO TODO TODO TODO
 
-function querytrialsandphenomes()::Nothing
+function querytrialsandphenomes(;
+    traits::Vector{Union{Missing, String}},
+    species::Vector{Union{Missing, String}} = [missing],
+    classifications::Vector{Union{Missing, String}} = [missing],
+    populations::Vector{Union{Missing, String}} = [missing],
+    entries::Vector{Union{Missing, String}} = [missing],
+    years::Vector{Union{Missing, String}} = [missing],
+    seasons::Vector{Union{Missing, String}} = [missing],
+    harvests::Vector{Union{Missing, String}} = [missing],
+    sites::Vector{Union{Missing, String}} = [missing],
+    blocks::Vector{Union{Missing, String}} = [missing],
+    rows::Vector{Union{Missing, String}} = [missing],
+    cols::Vector{Union{Missing, String}} = [missing],
+    replications::Vector{Union{Missing, String}} = [missing],
+    include_all_fields::Bool = false,
+    verbose::Bool = false,
+)::Nothing
+    # traits::Vector{Union{Missing, String}};
+    # species::Vector{Union{Missing, String}} = [missing];
+    # classifications::Vector{Union{Missing, String}} = [missing];
+    # populations::Vector{Union{Missing, String}} = [missing];
+    # entries::Vector{Union{Missing, String}} = [missing];
+    # years::Vector{Union{Missing, String}} = [missing];
+    # seasons::Vector{Union{Missing, String}} = [missing];
+    # harvests::Vector{Union{Missing, String}} = [missing];
+    # sites::Vector{Union{Missing, String}} = [missing];
+    # blocks::Vector{Union{Missing, String}} = [missing];
+    # rows::Vector{Union{Missing, String}} = [missing];
+    # cols::Vector{Union{Missing, String}} = [missing];
+    # replications::Vector{Union{Missing, String}} = [missing];
+    # include_all_fields::Bool = false;
+    # verbose::Bool = false;
     expression = """
         SELECT
-            en.name AS entry_name,
-            en.population,
             en.species,
             en.classification,
+            en.population,
+            en.name AS entry_name,
             tl.year,
             tl.season,
             tl.harvest,
