@@ -32,209 +32,188 @@ function dbinit(schema_path::String = "db/schema.sql")
     close(conn)
 end
 
-function uploadtrials(; 
+# Database interactions:
+# 1. Upload new:
+#   1.a. trials data
+#   1.b. phenomes data
+#   1.c. analysis information (including name and description)
+#   1.d. TODO: reference genomes, and allele frequency data including genome coordinates
+# 2. Update:
+#   2.a. entries table with description
+#   2.b. traits table with description
+#   2.c. trials table with description
+#   2.d. analyses table with additional analyses and/or tags on existing entry-trait-trial-layout combinations
+#   2.e. TODO: genome marker variants table
+
+function uploadtrialsorphenomes(; 
     fname::String,
     species::String = "unspecified",
-    classification::Union{Missing, String} = missing,
-    description::Union{Missing, String} = missing,
-    analysis_name::Union{Missing, String} = missing,
+    species_classification::Union{Missing, String} = missing,
+    analysis::Union{Missing, String} = missing,
     analysis_description::Union{Missing, String} = missing,
+    year::Union{Missing, Int64} = missing,
+    season::Union{Missing, String} = missing, 
+    harvest::Union{Missing, String} = missing, 
+    site::Union{Missing, String} = missing, 
     sep::String = "\t",
     verbose::Bool = false
 )::Nothing
     # genomes = GenomicBreedingCore.simulategenomes(n=10, verbose=false);
     # trials, _ = GenomicBreedingCore.simulatetrials(genomes=genomes, verbose=false);
     # trials.years = replace.(trials.years, "year_" => "202")
-    # fname = writedelimited(trials); sep = "\t"; verbose = true;
+    # fname = writedelimited(trials)
+    # # tebv = analyse(trials, "y ~ 1|entries"); phenomes = merge(merge(tebv.phenomes[1], tebv.phenomes[2]), tebv.phenomes[3]); fname = writedelimited(phenomes)
     # species = "unspecified"
-    # classification = missing
-    # description = missing
-    # analysis_name = missing
-    trials = try
-        readdelimited(Trials, fname=fname, sep=sep, verbose=verbose)
+    # species_classification = missing
+    # analysis = missing
+    # analysis_description = missing
+    # year = missing
+    # season = missing
+    # harvest = missing
+    # site = missing
+    # sep = "\t"
+    # verbose = true
+    trials_or_phenomes = try
+        try
+            readdelimited(Trials, fname=fname, sep=sep, verbose=verbose)
+        catch
+            Suppressor.@suppress readjld2(Trials, fname=fname)
+        end
     catch
-        readjld2(Trials, fname=fname)
+        try 
+            readdelimited(Phenomes, fname=fname, sep=sep, verbose=verbose)
+        catch
+            Suppressor.@suppress readjld2(Phenomes, fname=fname)
+        end
     end
-    df = tabularise(trials)
+    df = tabularise(trials_or_phenomes)
     expression = """
         WITH
             entry AS (
-                INSERT INTO entries (name, population, species, classification, description)
-                VALUES (\$1, \$2, \$3, \$4, \$5)
-                ON CONFLICT (name, species) 
-                DO UPDATE SET name = EXCLUDED.name
+                INSERT INTO entries (name, population, species, classification)
+                VALUES (\$1, \$2, \$3, \$4)
+                ON CONFLICT (name, population, species, classification) 
+                DO UPDATE SET description = EXCLUDED.description
                 RETURNING id
             ),
             trait AS (
-                INSERT INTO traits (name, description) 
-                VALUES (\$6, \$7)
+                INSERT INTO traits (name)
+                VALUES (\$5)
                 ON CONFLICT (name) 
-                DO UPDATE SET name = EXCLUDED.name
+                DO UPDATE SET description = EXCLUDED.description
                 RETURNING id
             ),
             trial AS (
-                INSERT INTO trials (year, season, harvest, site, treatment, description)
-                VALUES (\$8, \$9, \$10, \$11, \$12, \$13)
-                ON CONFLICT (year, season, harvest, site, treatment)
-                DO UPDATE SET year = EXCLUDED.year
+                INSERT INTO trials (year, season, harvest, site)
+                VALUES (\$6, \$7, \$8, \$9)
+                ON CONFLICT (year, season, harvest, site)
+                DO UPDATE SET description = EXCLUDED.description
                 RETURNING id
             ),
             layout AS (
                 INSERT INTO layouts (replication, block, row, col)
-                VALUES (\$14, \$15, \$16, \$17)
+                VALUES (\$10, \$11, \$12, \$13)
                 ON CONFLICT (replication, block, row, col)
                 DO UPDATE SET replication = EXCLUDED.replication
                 RETURNING id
             )
         INSERT INTO phenotype_data (entry_id, trait_id, trial_id, layout_id, value)
-        SELECT entry.id, trait.id, trial.id, layout.id, \$18
+        SELECT entry.id, trait.id, trial.id, layout.id, \$14
         FROM entry, trait, trial, layout
         ON CONFLICT (entry_id, trait_id, trial_id, layout_id)
         DO NOTHING
     """
-    # expression_add_tag = if !ismissing(analysis_name)
-    #     """
-    #         WITH 
-    #             entry AS (
-    #                 INSERT INTO entries (name, population, species, classification, description)
-    #                 VALUES (\$1, \$2, \$3, \$4, \$5)
-    #                 ON CONFLICT (name, species) 
-    #                 DO UPDATE SET name = EXCLUDED.name
-    #                 RETURNING id
-    #             ),
-    #             trial AS (
-    #                 INSERT INTO trials (year, season, harvest, site, block, row, col, replication)
-    #                 VALUES (\$6, \$7, \$8, \$9, \$10, \$11, \$12, \$13)
-    #                 ON CONFLICT (year, season, harvest, site, block, row, col, replication)
-    #                 DO UPDATE SET year = EXCLUDED.year
-    #                 RETURNING id
-    #             ),
-    #             trait AS (
-    #                 INSERT INTO traits (name) 
-    #                 VALUES (\$14)
-    #                 ON CONFLICT (name) 
-    #                 DO UPDATE SET name = EXCLUDED.name
-    #                 RETURNING id
-    #             ),
-    #             analysis AS (
-    #                 INSERT INTO traits (name) 
-    #                 VALUES (\$14)
-    #                 ON CONFLICT (name) 
-    #                 DO UPDATE SET name = EXCLUDED.name
-    #                 RETURNING id
-    #             )
-    #         INSERT INTO analysis_tags (analysis_id, entry_id, trial_id, trait_id)
-    #         SELECT \$15, entry.id, trial.id, trait.id
-    #         FROM entry, trial, trait
-    #         ON CONFLICT (analysis_id, entry_id, trial_id, trait_id)
-    #         DO NOTHING
-    #     """
-    # end
-    conn = dbconnect()
-    execute(conn, "BEGIN;")
-    traits = names(df)[12:end]
-    for trait in traits
-        # trait = traits[1]
-        for i in 1:nrow(df)
-            # i = 1
-            year = try
-                parse(Int64, df.years[i])
-            catch
-                throw(ArgumentError("The year in line $i, i.e. `$(df.years[i])` cannot be parsed into Int64."))
-            end
-            input = [
-                df.entries[i], df.populations[i], species, classification, description,
-                year, df.seasons[i], df.harvests[i], df.sites[i], df.blocks[i], df.rows[i], df.cols[i], df.replications[i],
-                trait, df[i, trait],
-            ]
-            res = execute(conn, expression, input)
-            if !ismissing(analysis_name)
-                execute(conn, expression_add_tag, vcat(input[1:(end-1)], analysis_name))
-            end
-        end
+    expression_add_tag = if !ismissing(analysis)
+        """
+            WITH
+                entry AS (
+                    INSERT INTO entries (name, population, species, classification)
+                    VALUES (\$1, \$2, \$3, \$4)
+                    ON CONFLICT (name, population, species, classification) 
+                    DO UPDATE SET description = EXCLUDED.description
+                    RETURNING id
+                ),
+                trait AS (
+                    INSERT INTO traits (name)
+                    VALUES (\$5)
+                    ON CONFLICT (name) 
+                    DO UPDATE SET description = EXCLUDED.description
+                    RETURNING id
+                ),
+                trial AS (
+                    INSERT INTO trials (year, season, harvest, site)
+                    VALUES (\$6, \$7, \$8, \$9)
+                    ON CONFLICT (year, season, harvest, site)
+                    DO UPDATE SET description = EXCLUDED.description
+                    RETURNING id
+                ),
+                layout AS (
+                    INSERT INTO layouts (replication, block, row, col)
+                    VALUES (\$10, \$11, \$12, \$13)
+                    ON CONFLICT (replication, block, row, col)
+                    DO UPDATE SET replication = EXCLUDED.replication
+                    RETURNING id
+                ),
+                analysis AS (
+                    INSERT INTO analyses (name, description)
+                    VALUES (\$14, \$15)
+                    ON CONFLICT (name)
+                    DO UPDATE SET name = EXCLUDED.name
+                    RETURNING id
+                )
+            INSERT INTO analysis_tags (entry_id, trait_id, trial_id, layout_id, analysis_id)
+            SELECT entry.id, trait.id, trial.id, layout.id, analysis.id
+            FROM entry, trait, trial, layout, analysis
+            ON CONFLICT (entry_id, trait_id, trial_id, layout_id, analysis_id)
+            DO NOTHING
+        """
     end
-    println("To commit please leave empty. To rollback enter any key:")
-    commit_else_rollback = readline()
-    if commit_else_rollback == ""
-        execute(conn, "COMMIT;")
+    conn = dbconnect()
+    # execute(conn, "BEGIN;")
+    traits = if isa(trials_or_phenomes, Trials)
+        names(df)[12:end]
     else
-        execute(conn, "ROLLBACK;")
+        names(df)[4:end]
     end
-    close(conn)
-end
-
-function uploadphenomes(; 
-    fname::String,
-    species::String = "unspecified",
-    classification::Union{Missing, String} = missing,
-    description::Union{Missing, String} = missing,
-    year::Union{Missing, Int64} = missing,
-    season::Union{Missing, String} = missing, 
-    harvest::Union{Missing, String} = missing, 
-    site::Union{Missing, String} = missing, 
-    analysis_tag::Union{Missing, String} = missing,
-    sep::String = "\t", 
-    verbose::Bool = false
-)::Nothing
-    # genomes = GenomicBreedingCore.simulategenomes(n=10, verbose=false);
-    # trials, _ = GenomicBreedingCore.simulatetrials(genomes=genomes, verbose=false);
-    # trials.years = replace.(trials.years, "year_" => "202")
-    # tebv = analyse(trials, "y ~ 1|entries")
-    # phenomes = merge(merge(tebv.phenomes[1], tebv.phenomes[2]), tebv.phenomes[3])
-    # fname = writedelimited(phenomes); sep = "\t"; verbose = true;
-    # species = "unspecified"
-    # classification = missing
-    # description = missing
-    # year = missing; season = missing; harvest = missing; site = missing;
-    phenomes = try
-        readdelimited(Phenomes, fname=fname, sep=sep, verbose=verbose)
-    catch
-        readjld2(Phenomes, fname=fname)
-    end
-    df = tabularise(phenomes)
-    expression = """
-        WITH 
-            entry AS (
-                INSERT INTO entries (name, population, species, classification, description) 
-                VALUES (\$1, \$2, \$3, \$4, \$5)
-                ON CONFLICT (name, species) 
-                DO UPDATE SET name = EXCLUDED.name
-                RETURNING id
-            ),
-            trial AS (
-                INSERT INTO trials (year, season, harvest, site) -- excludes: block, row, col, replication
-                VALUES (\$6, \$7, \$8, \$9)
-                ON CONFLICT (year, season, harvest, site, block, row, col, replication)
-                DO UPDATE SET year = EXCLUDED.year
-                RETURNING id
-            ),
-            trait AS (
-                INSERT INTO traits (name) 
-                VALUES (\$10)
-                ON CONFLICT (name) 
-                DO UPDATE SET name = EXCLUDED.name
-                RETURNING id
-            )
-        INSERT INTO phenotype_data (entry_id, trial_id, trait_id, value)
-        SELECT entry.id, trial.id, trait.id, \$11
-        FROM entry, trial, trait
-        ON CONFLICT (entry_id, trial_id, trait_id)
-        DO NOTHING
-    """
-    conn = dbconnect()
-    traits = names(df)[4:end]
     for trait in traits
         # trait = traits[1]
         for i in 1:nrow(df)
             # i = 1
-            input = [
-                df.entries[i], df.populations[i], species, classification, description,
-                year, season, harvest, site,
-                trait, df[i, trait],
-            ]
-            res = execute(conn, expression, input)
+            values = if isa(trials_or_phenomes, Trials)
+                year = try
+                    parse(Int64, df.years[i])
+                catch
+                    throw(ArgumentError("The year in line $i, i.e. `$(df.years[i])` cannot be parsed into Int64."))
+                end    
+                [
+                    df.entries[i], df.populations[i], species, species_classification,
+                    trait,
+                    year, df.seasons[i], df.harvests[i], df.sites[i],
+                    df.replications[i], df.blocks[i], df.rows[i], df.cols[i],
+                    df[i, trait]
+                ]
+            else
+                [
+                    df.entries[i], df.populations[i], species, species_classification,
+                    trait,
+                    year, season, harvest, site,
+                    missing, missing, missing, missing,
+                    df[i, trait]
+                ]
+            end
+            execute(conn, expression, values)
+            if !ismissing(analysis)
+                execute(conn, expression_add_tag, vcat(values[1:(end-1)], analysis, analysis_description))
+            end
         end
     end
+    # println("To commit please leave empty. To rollback enter any key:")
+    # commit_else_rollback = readline()
+    # if commit_else_rollback == ""
+    #     execute(conn, "COMMIT;")
+    # else
+    #     execute(conn, "ROLLBACK;")
+    # end
     close(conn)
 end
 
