@@ -9,7 +9,7 @@ using GenomicBreedingCore, GenomicBreedingIO
 DotEnv.load!(joinpath(homedir(), ".env"))
 
 # Connect to database
-function dbconnect()
+function dbconnect()::LibPQ.Connection
     db_user = ENV["DB_USER"];
     db_password = ENV["DB_PASSWORD"];
     db_name = ENV["DB_NAME"];
@@ -19,7 +19,7 @@ function dbconnect()
 end
 
 # Initialize the PostgreSQL database schema
-function dbinit(schema_path::String = "db/schema.sql")
+function dbinit(schema_path::String = "db/schema.sql")::Nothing
     # schema_path = "db/schema.sql"
     conn = dbconnect()
     sql = read(schema_path, String)
@@ -180,7 +180,7 @@ function uploadtrialsorphenomes(;
         for i in 1:nrow(df)
             # i = 1
             values = if isa(trials_or_phenomes, Trials)
-                year = try
+                year_from_df = try
                     parse(Int64, df.years[i])
                 catch
                     throw(ArgumentError("The year in line $i, i.e. `$(df.years[i])` cannot be parsed into Int64."))
@@ -188,7 +188,7 @@ function uploadtrialsorphenomes(;
                 [
                     df.entries[i], df.populations[i], species, species_classification,
                     trait,
-                    year, df.seasons[i], df.harvests[i], df.sites[i],
+                    year_from_df, df.seasons[i], df.harvests[i], df.sites[i],
                     df.replications[i], df.blocks[i], df.rows[i], df.cols[i],
                     df[i, trait]
                 ]
@@ -223,38 +223,95 @@ end
 # TODO TODO TODO TODO TODO TODO TODO TODO TODO
 # TODO TODO TODO TODO TODO TODO TODO TODO TODO
 
+function querytable(
+    table::String;
+    fields::Union{Missing, Vector{String}} = missing,
+    filters::Union{Missing, Dict{String, Union{Tuple{Int64, Int64}, Vector{Int64}, Vector{String}}}} = missing,
+)::DataFrame
+    # Connect to the database
+    conn = dbconnect()
+    # Check arguments
+    try execute(conn, raw"SELECT table_name FROM information_schema.tables WHERE table_name = \$1", [table])
+    catch
+        throw(ArgumentError("The table $table does not exist."))
+    end
+    for f in fields
+        try execute(conn, raw"SELECT \$1 FROM information_schema.columns WHERE table_name = \$2", [f, table])
+        catch
+            throw(ArgumentError("The column $f does not exist in table $table."))
+        end
+    end
+    for (k, _) in filters
+        try execute(conn, raw"SELECT \$1 FROM information_schema.columns WHERE table_name = \$2", [string(k), table])
+        catch
+            throw(ArgumentError("The column $(string(k)) does not exist in table $table."))
+        end
+    end
+    # Build the expression
+    expression_vector = ["SELECT"]
+    if ismissing(fields)
+        push!(expression_vector, "* FROM")
+    else
+        push!(expression_vector, string(join(fields, ","), " FROM"))
+    end
+    if ismissing(filters)
+        nothing
+    else
+        push!(expression_vector, "WHERE")
+        conditions::Vector{String} = []
+        for (k, v) in filters
+            if isa(v, Tuple{Int64, Int64})
+                push!(conditions, string("(", k, " BETWEEN ", v[1], " AND ", v[2]), ")")
+            elseif isa(v, Vector{Int64})
+                push!(conditions, string("(", k, " IN (", join(v, ","), ")"), ")")
+            else
+                # For Vector{String}
+                # Notice the single-quotes between the string values
+                push!(conditions, string("(", k, " IN ('", join(v, "','"), "')"), ")")
+            end
+        end
+        push!(expression_vector, join(conditions, " AND "))
+    end
+    # Query
+    res = execute(conn, join(expression_vector, " "))
+    close(conn)
+    # Output
+    DataFrame(columntable(res))
+end
+
 function querytrialsandphenomes(;
-    traits::Vector{Union{Missing, String}},
-    species::Vector{Union{Missing, String}} = [missing],
-    classifications::Vector{Union{Missing, String}} = [missing],
-    populations::Vector{Union{Missing, String}} = [missing],
-    entries::Vector{Union{Missing, String}} = [missing],
-    years::Vector{Union{Missing, String}} = [missing],
-    seasons::Vector{Union{Missing, String}} = [missing],
-    harvests::Vector{Union{Missing, String}} = [missing],
-    sites::Vector{Union{Missing, String}} = [missing],
-    blocks::Vector{Union{Missing, String}} = [missing],
-    rows::Vector{Union{Missing, String}} = [missing],
-    cols::Vector{Union{Missing, String}} = [missing],
-    replications::Vector{Union{Missing, String}} = [missing],
+    traits::Vector{String},
+    species::Union{Missing, Vector{String}} = missing,
+    classifications::Union{Missing, Vector{String}} = missing,
+    populations::Union{Missing, Vector{String}} = missing,
+    entries::Union{Missing, Vector{String}} = missing,
+    years::Union{Missing, Vector{String}} = missing,
+    seasons::Union{Missing, Vector{String}} = missing,
+    harvests::Union{Missing, Vector{String}} = missing,
+    sites::Union{Missing, Vector{String}} = missing,
+    blocks::Union{Missing, Vector{String}} = missing,
+    rows::Union{Missing, Vector{String}} = missing,
+    cols::Union{Missing, Vector{String}} = missing,
+    replications::Union{Missing, Vector{String}} = missing,
     include_all_fields::Bool = false,
     verbose::Bool = false,
 )::Nothing
-    # traits::Vector{Union{Missing, String}};
-    # species::Vector{Union{Missing, String}} = [missing];
-    # classifications::Vector{Union{Missing, String}} = [missing];
-    # populations::Vector{Union{Missing, String}} = [missing];
-    # entries::Vector{Union{Missing, String}} = [missing];
-    # years::Vector{Union{Missing, String}} = [missing];
-    # seasons::Vector{Union{Missing, String}} = [missing];
-    # harvests::Vector{Union{Missing, String}} = [missing];
-    # sites::Vector{Union{Missing, String}} = [missing];
-    # blocks::Vector{Union{Missing, String}} = [missing];
-    # rows::Vector{Union{Missing, String}} = [missing];
-    # cols::Vector{Union{Missing, String}} = [missing];
-    # replications::Vector{Union{Missing, String}} = [missing];
+    # traits::Vector{String} = ["trait_1"];
+    # species::Union{Missing, Vector{String}} = missing;
+    # classifications::Union{Missing, Vector{String}} = missing;
+    # populations::Union{Missing, Vector{String}} = missing;
+    # entries::Union{Missing, Vector{String}} = missing;
+    # years::Union{Missing, Vector{String}} = missing;
+    # seasons::Union{Missing, Vector{String}} = missing;
+    # harvests::Union{Missing, Vector{String}} = missing;
+    # sites::Union{Missing, Vector{String}} = missing;
+    # blocks::Union{Missing, Vector{String}} = missing;
+    # rows::Union{Missing, Vector{String}} = missing;
+    # cols::Union{Missing, Vector{String}} = missing;
+    # replications::Union{Missing, Vector{String}} = missing;
     # include_all_fields::Bool = false;
     # verbose::Bool = false;
+    expression_vector = 
     expression = """
         SELECT
             en.species,
