@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS entries (
     description TEXT
 );
 -- Add unique constraint making sure that the NULLs are not considered distinct since in SQL, a NULL is not equivalent to other NULLs.
-ALTER TABLE entries ADD CONSTRAINT unique_entry_instance UNIQUE NULLS NOT DISTINCT (name, species, population, classification);
+ALTER TABLE entries ADD CONSTRAINT unique_entry_instance UNIQUE NULLS NOT DISTINCT (name, species, population, classification); 
 
 -- Traits (e.g., yield, height)
 CREATE TABLE IF NOT EXISTS traits (
