@@ -39,8 +39,14 @@ querytable("phenotype_data", fields=["id", "value"], filters=Dict("value" => (10
 """
 function querytable(
     table::String;
-    fields::Union{Missing, Vector{String}} = missing,
-    filters::Union{Missing, Dict{String, Tuple{Int64, Int64}}, Dict{String, Tuple{Float64, Float64}}, Dict{String, Vector{Int64}}, Dict{String, Vector{String}}} = missing,
+    fields::Union{Missing,Vector{String}} = missing,
+    filters::Union{
+        Missing,
+        Dict{String,Tuple{Int64,Int64}},
+        Dict{String,Tuple{Float64,Float64}},
+        Dict{String,Vector{Int64}},
+        Dict{String,Vector{String}},
+    } = missing,
 )::DataFrame
     # table = "entries"; fields = missing; filters = missing;
     # table = "phenotype_data"; fields=["id", "value"]; filters = missing;
@@ -48,13 +54,23 @@ function querytable(
     # Connect to the database
     conn = dbconnect()
     # Check arguments
-    try execute(conn, "SELECT table_name FROM information_schema.tables WHERE table_name = \$1", [table])
+    try
+        execute(
+            conn,
+            "SELECT table_name FROM information_schema.tables WHERE table_name = \$1",
+            [table],
+        )
     catch
         throw(ArgumentError("The table $table does not exist."))
     end
     if !ismissing(fields)
         for f in fields
-            try execute(conn, "SELECT \$1 FROM information_schema.columns WHERE table_name = \$2", [f, table])
+            try
+                execute(
+                    conn,
+                    "SELECT \$1 FROM information_schema.columns WHERE table_name = \$2",
+                    [f, table],
+                )
             catch
                 throw(ArgumentError("The column $f does not exist in table $table."))
             end
@@ -62,9 +78,18 @@ function querytable(
     end
     if !ismissing(filters)
         for (k, _) in filters
-            try execute(conn, "SELECT \$1 FROM information_schema.columns WHERE table_name = \$2", [string(k), table])
+            try
+                execute(
+                    conn,
+                    "SELECT \$1 FROM information_schema.columns WHERE table_name = \$2",
+                    [string(k), table],
+                )
             catch
-                throw(ArgumentError("The column $(string(k)) does not exist in table $table."))
+                throw(
+                    ArgumentError(
+                        "The column $(string(k)) does not exist in table $table.",
+                    ),
+                )
             end
         end
     end
@@ -81,7 +106,7 @@ function querytable(
         push!(expression_vector, "WHERE")
         conditions::Vector{String} = []
         for (k, v) in filters
-            if isa(v, Tuple{Int64, Int64}) ||isa(v, Tuple{Float64, Float64})
+            if isa(v, Tuple{Int64,Int64}) || isa(v, Tuple{Float64,Float64})
                 push!(conditions, string("(", k, " BETWEEN ", v[1], " AND ", v[2], ")"))
             elseif isa(v, Vector{Int64})
                 push!(conditions, string("(", k, " IN (", join(v, ","), "))"))
@@ -139,47 +164,50 @@ The function:
     6.12. col
 """
 function extractmainfieldstablesandcols(conn::LibPQ.Connection)::DataFrame
-    tables = DataFrame(columntable(execute(conn, """
-        SELECT 
-            table_name,column_name 
-        FROM information_schema.columns 
-        WHERE 
-            (table_schema NOT IN ('pg_catalog', 'information_schema')) AND
-            (column_name NOT LIKE ('%id')) AND 
-            (column_name NOT IN ('description')) AND
-            (table_name NOT LIKE ('traits')) AND
-            (table_name NOT IN ('phenotype_data')) AND
-            (table_name NOT LIKE ('analys%s%'))
-        ORDER BY table_name;
-    """)))
+    tables = DataFrame(columntable(execute(
+        conn,
+        """
+    SELECT 
+        table_name,column_name 
+    FROM information_schema.columns 
+    WHERE 
+        (table_schema NOT IN ('pg_catalog', 'information_schema')) AND
+        (column_name NOT LIKE ('%id')) AND 
+        (column_name NOT IN ('description')) AND
+        (table_name NOT LIKE ('traits')) AND
+        (table_name NOT IN ('phenotype_data')) AND
+        (table_name NOT LIKE ('analys%s%'))
+    ORDER BY table_name;
+""",
+    )))
     # Sort the field names sensibly
-    tables.table_name[tables.table_name .== "layouts"] .= "z-layouts"
-    tables.column_name[tables.column_name .== "replication"] .= "a-replication"
-    tables.column_name[tables.column_name .== "block"] .= "b-block"
-    tables.column_name[tables.column_name .== "row"] .= "c-row"
-    tables.column_name[tables.column_name .== "col"] .= "d-col"
-    tables.column_name[tables.column_name .== "species"] .= "a-species"
-    tables.column_name[tables.column_name .== "classification"] .= "b-classification"
-    tables.column_name[tables.column_name .== "name"] .= "c-name"
-    tables.column_name[tables.column_name .== "population"] .= "d-population"
-    tables.column_name[tables.column_name .== "year"] .= "e-year"
-    tables.column_name[tables.column_name .== "season"] .= "f-season"
-    tables.column_name[tables.column_name .== "harvest"] .= "g-harvest"
-    tables.column_name[tables.column_name .== "site"] .= "h-site"
+    tables.table_name[tables.table_name.=="layouts"] .= "z-layouts"
+    tables.column_name[tables.column_name.=="replication"] .= "a-replication"
+    tables.column_name[tables.column_name.=="block"] .= "b-block"
+    tables.column_name[tables.column_name.=="row"] .= "c-row"
+    tables.column_name[tables.column_name.=="col"] .= "d-col"
+    tables.column_name[tables.column_name.=="species"] .= "a-species"
+    tables.column_name[tables.column_name.=="classification"] .= "b-classification"
+    tables.column_name[tables.column_name.=="name"] .= "c-name"
+    tables.column_name[tables.column_name.=="population"] .= "d-population"
+    tables.column_name[tables.column_name.=="year"] .= "e-year"
+    tables.column_name[tables.column_name.=="season"] .= "f-season"
+    tables.column_name[tables.column_name.=="harvest"] .= "g-harvest"
+    tables.column_name[tables.column_name.=="site"] .= "h-site"
     sort!(tables)
-    tables.table_name[tables.table_name .== "z-layouts"] .= "layouts"
-    tables.column_name[tables.column_name .== "a-replication"] .= "replication"
-    tables.column_name[tables.column_name .== "b-block"] .= "block"
-    tables.column_name[tables.column_name .== "c-row"] .= "row"
-    tables.column_name[tables.column_name .== "d-col"] .= "col"
-    tables.column_name[tables.column_name .== "a-species"] .= "species"
-    tables.column_name[tables.column_name .== "b-classification"] .= "classification"
-    tables.column_name[tables.column_name .== "c-name"] .= "name"
-    tables.column_name[tables.column_name .== "d-population"] .= "population"
-    tables.column_name[tables.column_name .== "e-year"] .= "year"
-    tables.column_name[tables.column_name .== "f-season"] .= "season"
-    tables.column_name[tables.column_name .== "g-harvest"] .= "harvest"
-    tables.column_name[tables.column_name .== "h-site"] .= "site"
+    tables.table_name[tables.table_name.=="z-layouts"] .= "layouts"
+    tables.column_name[tables.column_name.=="a-replication"] .= "replication"
+    tables.column_name[tables.column_name.=="b-block"] .= "block"
+    tables.column_name[tables.column_name.=="c-row"] .= "row"
+    tables.column_name[tables.column_name.=="d-col"] .= "col"
+    tables.column_name[tables.column_name.=="a-species"] .= "species"
+    tables.column_name[tables.column_name.=="b-classification"] .= "classification"
+    tables.column_name[tables.column_name.=="c-name"] .= "name"
+    tables.column_name[tables.column_name.=="d-population"] .= "population"
+    tables.column_name[tables.column_name.=="e-year"] .= "year"
+    tables.column_name[tables.column_name.=="f-season"] .= "season"
+    tables.column_name[tables.column_name.=="g-harvest"] .= "harvest"
+    tables.column_name[tables.column_name.=="h-site"] .= "site"
     tables
 end
 
@@ -210,10 +238,16 @@ replacing wildcards (*) with SQL wildcards (%) and handling multiple values.
 function addfilters!(
     expression::Vector{String},
     counter::Vector{Int64},
-    parameters::Vector{Any}; 
-    table::String, 
+    parameters::Vector{Any};
+    table::String,
     column::String,
-    values::Union{Vector{String}, Vector{Float64}, Tuple{Float64, Float64}, Vector{Int64}, Tuple{Int64, Int64}}
+    values::Union{
+        Vector{String},
+        Vector{Float64},
+        Tuple{Float64,Float64},
+        Vector{Int64},
+        Tuple{Int64,Int64},
+    },
 )::Nothing
     push!(expression, "(")
     if isa(values, Vector{String})
@@ -235,7 +269,10 @@ function addfilters!(
         # Two-element tuple
         counter[1] += 2
         push!(parameters, minimum(values), maximum(values))
-        push!(expression, "($table.$column BETWEEN \$$(counter[1]-1) AND \$$(counter[1])) OR")
+        push!(
+            expression,
+            "($table.$column BETWEEN \$$(counter[1]-1) AND \$$(counter[1])) OR",
+        )
     end
     # Convert the hanging 'OR' to the closing parenthesis and 'AND' for the next filter
     expression[end] = replace(expression[end], Regex(" OR\$") => ") AND")
@@ -243,10 +280,21 @@ function addfilters!(
     nothing
 end
 
+"""
+    cleaunptraitnames(trait_name::String)::String
+
+Clean up trait names by replacing whitespace and special characters with underscores.
+
+# Arguments
+- `trait_name::String`: The trait name to be cleaned
+
+# Returns
+- `String`: The cleaned trait name with spaces, tabs and pipe characters replaced with underscores
+"""
 function cleaunptraitnames(trait_name::String)::String
-    trait_name = replace(trait_name, " "=>"_")
-    trait_name = replace(trait_name, "\t"=>"_")
-    trait_name = replace(trait_name, "|"=>"_")
+    trait_name = replace(trait_name, " " => "_")
+    trait_name = replace(trait_name, "\t" => "_")
+    trait_name = replace(trait_name, "|" => "_")
     trait_name
 end
 
@@ -302,18 +350,18 @@ querytrialsandphenomes(traits = ["trait_1", "trait_3"], entries=["entry_06", "en
 """
 function querytrialsandphenomes(;
     traits::Vector{String},
-    species::Union{Missing, Vector{String}} = missing,
-    classifications::Union{Missing, Vector{String}} = missing,
-    populations::Union{Missing, Vector{String}} = missing,
-    entries::Union{Missing, Vector{String}} = missing,
-    years::Union{Missing, Tuple{Int64, Int64}, Vector{Int64}} = missing,
-    seasons::Union{Missing, Vector{String}} = missing,
-    harvests::Union{Missing, Vector{String}} = missing,
-    sites::Union{Missing, Vector{String}} = missing,
-    blocks::Union{Missing, Vector{String}} = missing,
-    rows::Union{Missing, Vector{String}} = missing,
-    cols::Union{Missing, Vector{String}} = missing,
-    replications::Union{Missing, Vector{String}} = missing,
+    species::Union{Missing,Vector{String}} = missing,
+    classifications::Union{Missing,Vector{String}} = missing,
+    populations::Union{Missing,Vector{String}} = missing,
+    entries::Union{Missing,Vector{String}} = missing,
+    years::Union{Missing,Tuple{Int64,Int64},Vector{Int64}} = missing,
+    seasons::Union{Missing,Vector{String}} = missing,
+    harvests::Union{Missing,Vector{String}} = missing,
+    sites::Union{Missing,Vector{String}} = missing,
+    blocks::Union{Missing,Vector{String}} = missing,
+    rows::Union{Missing,Vector{String}} = missing,
+    cols::Union{Missing,Vector{String}} = missing,
+    replications::Union{Missing,Vector{String}} = missing,
     sort_rows::Bool = true,
     verbose::Bool = false,
 )::DataFrame
@@ -350,10 +398,8 @@ function querytrialsandphenomes(;
     if verbose
         println("Defining the output fields...")
     end
-    expression::Vector{String} = [
-        "SELECT",
-        join(string.(tables.table_name, ".", tables.column_name), ",\n")
-    ]
+    expression::Vector{String} =
+        ["SELECT", join(string.(tables.table_name, ".", tables.column_name), ",\n")]
     # Set each trait as additional output field
     if verbose
         println("Defining the output trait fields...")
@@ -364,7 +410,9 @@ function querytrialsandphenomes(;
         for trait in replace.(traits, "*" => "%")
             # trait = replace.(traits, "*" => "%")[1]
             # If there is no '%' in trait then 'LIKE' is equivalent to '='
-            res = DataFrame(execute(conn, "SELECT name FROM traits WHERE name LIKE \$1", [trait]))
+            res = DataFrame(
+                execute(conn, "SELECT name FROM traits WHERE name LIKE \$1", [trait]),
+            )
             if nrow(res) > 0
                 matches = vcat(matches, res.name)
             end
@@ -373,44 +421,160 @@ function querytrialsandphenomes(;
     end
     for trait in traits
         expression[end] = expression[end] * ",\n"
-        push!(expression, "MAX(CASE WHEN traits.name = '$trait' THEN phenotype_data.value END) AS $(cleaunptraitnames(trait))")
+        push!(
+            expression,
+            "MAX(CASE WHEN traits.name = '$trait' THEN phenotype_data.value END) AS $(cleaunptraitnames(trait))",
+        )
     end
     # Define and join the source tables
     if verbose
         println("Defining the source tables...")
     end
-    push!(expression, join([
-        "FROM"
-        "phenotype_data"
-        "JOIN"
-        "entries ON phenotype_data.entry_id = entries.id"
-        "JOIN"
-        "traits ON phenotype_data.trait_id = traits.id"
-        "JOIN"
-        "trials ON phenotype_data.trial_id = trials.id"
-        "JOIN"
-        "layouts ON phenotype_data.layout_id = layouts.id"
-    ], "\n"))
+    push!(
+        expression,
+        join(
+            [
+                "FROM"
+                "phenotype_data"
+                "JOIN"
+                "entries ON phenotype_data.entry_id = entries.id"
+                "JOIN"
+                "traits ON phenotype_data.trait_id = traits.id"
+                "JOIN"
+                "trials ON phenotype_data.trial_id = trials.id"
+                "JOIN"
+                "layouts ON phenotype_data.layout_id = layouts.id"
+            ],
+            "\n",
+        ),
+    )
     # Define the filters
     if verbose
         println("Setting the filter expressions and their respective parameters...")
     end
     counter = [0]
     parameters = []
-    if !ismissing(species) || !ismissing(classifications) || !ismissing(populations) || !ismissing(entries) || !ismissing(years) || !ismissing(seasons) || !ismissing(harvests) || !ismissing(sites) || !ismissing(blocks) || !ismissing(rows) || !ismissing(cols) || !ismissing(replications)
+    if !ismissing(species) ||
+       !ismissing(classifications) ||
+       !ismissing(populations) ||
+       !ismissing(entries) ||
+       !ismissing(years) ||
+       !ismissing(seasons) ||
+       !ismissing(harvests) ||
+       !ismissing(sites) ||
+       !ismissing(blocks) ||
+       !ismissing(rows) ||
+       !ismissing(cols) ||
+       !ismissing(replications)
         push!(expression, "WHERE")
-        !ismissing(species) ? addfilters!(expression, counter, parameters, table="entries", column="species", values=species) : nothing
-        !ismissing(classifications) ? addfilters!(expression, counter, parameters, table="entries", column="classification", values=classifications) : nothing
-        !ismissing(populations) ? addfilters!(expression, counter, parameters, table="entries", column="population", values=populations) : nothing
-        !ismissing(entries) ? addfilters!(expression, counter, parameters, table="entries", column="name", values=entries) : nothing
-        !ismissing(years) ? addfilters!(expression, counter, parameters, table="trials", column="year", values=years) : nothing
-        !ismissing(seasons) ? addfilters!(expression, counter, parameters, table="trials", column="season", values=seasons) : nothing
-        !ismissing(harvests) ? addfilters!(expression, counter, parameters, table="trials", column="harvest", values=harvests) : nothing
-        !ismissing(sites) ? addfilters!(expression, counter, parameters, table="trials", column="site", values=sites) : nothing
-        !ismissing(replications) ? addfilters!(expression, counter, parameters, table="layouts", column="replication", values=replications) : nothing
-        !ismissing(blocks) ? addfilters!(expression, counter, parameters, table="layouts", column="block", values=blocks) : nothing
-        !ismissing(rows) ? addfilters!(expression, counter, parameters, table="layouts", column="row", values=rows) : nothing
-        !ismissing(cols) ? addfilters!(expression, counter, parameters, table="layouts", column="col", values=cols) : nothing
+        !ismissing(species) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "entries",
+            column = "species",
+            values = species,
+        ) : nothing
+        !ismissing(classifications) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "entries",
+            column = "classification",
+            values = classifications,
+        ) : nothing
+        !ismissing(populations) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "entries",
+            column = "population",
+            values = populations,
+        ) : nothing
+        !ismissing(entries) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "entries",
+            column = "name",
+            values = entries,
+        ) : nothing
+        !ismissing(years) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "trials",
+            column = "year",
+            values = years,
+        ) : nothing
+        !ismissing(seasons) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "trials",
+            column = "season",
+            values = seasons,
+        ) : nothing
+        !ismissing(harvests) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "trials",
+            column = "harvest",
+            values = harvests,
+        ) : nothing
+        !ismissing(sites) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "trials",
+            column = "site",
+            values = sites,
+        ) : nothing
+        !ismissing(replications) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "layouts",
+            column = "replication",
+            values = replications,
+        ) : nothing
+        !ismissing(blocks) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "layouts",
+            column = "block",
+            values = blocks,
+        ) : nothing
+        !ismissing(rows) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "layouts",
+            column = "row",
+            values = rows,
+        ) : nothing
+        !ismissing(cols) ?
+        addfilters!(
+            expression,
+            counter,
+            parameters,
+            table = "layouts",
+            column = "col",
+            values = cols,
+        ) : nothing
         # Remove the hanging 'AND'
         expression[end] = replace(expression[end], Regex(" AND\$") => "")
     end
@@ -418,13 +582,23 @@ function querytrialsandphenomes(;
     if verbose
         println("Defining the aggregation fields...")
     end
-    push!(expression, string("GROUP BY ", join(string.(tables.table_name, ".", tables.column_name), ",\n")))
+    push!(
+        expression,
+        string(
+            "GROUP BY ",
+            join(string.(tables.table_name, ".", tables.column_name), ",\n"),
+        ),
+    )
     # Optional sorting
     if sort_rows
         if verbose
             println("Sorting the rows...")
         end
-        push!(expression, "ORDER BY ", join(string.(tables.table_name, ".", tables.column_name), ",\n"))
+        push!(
+            expression,
+            "ORDER BY ",
+            join(string.(tables.table_name, ".", tables.column_name), ",\n"),
+        )
     end
     # Parameterised query
     if verbose
@@ -447,8 +621,47 @@ function querytrialsandphenomes(;
     DataFrame(res)
 end
 
+"""
+    queryanalyses(; analyses::Vector{String}, verbose::Bool = false)::DataFrame
+
+Query and retrieve analysis data from a database, combining information from multiple tables and traits.
+
+# Arguments
+- `analyses::Vector{String}`: Vector of analysis names to query from the database
+- `verbose::Bool=false`: If true, prints detailed progress information during execution
+
+# Returns
+- `DataFrame`: A DataFrame containing the combined analysis results with the following:
+    - Standard fields from the main database tables
+    - Dynamic columns for each trait associated with the requested analyses
+    - Rows grouped by the main fields and aggregated trait values
+
+# Details
+The function performs the following operations:
+1. Connects to the database
+2. Extracts relevant table and column names
+3. Builds a parameterized SQL query that:
+   - Selects main fields from various tables
+   - Pivots trait values into columns
+   - Joins multiple tables (analysis_tags, phenotype_data, entries, traits, trials, layouts, analyses)
+   - Filters results based on the requested analyses
+   - Groups and sorts the results
+
+# Example
+
+```julia
+querytable("analyses")
+queryanalyses(analyses=["analysis_1"], verbose=true)
+queryanalyses(analyses=["analysis_2"], verbose=true)
+queryanalyses(analyses=["analysis_3"], verbose=true)
+queryanalyses(analyses=["analysis_4"], verbose=true)
+queryanalyses(analyses=["analysis_1", "analysis_4"], verbose=true)
+queryanalyses(analyses=["analysis_3", "analysis_4"], verbose=true)
+```
+"""
 function queryanalyses(;
     analyses::Vector{String},
+    sort_rows::Bool = true,
     verbose::Bool = false,
 )::DataFrame
     # analyses = ["analysis_1", "analysis_2"]
@@ -465,10 +678,8 @@ function queryanalyses(;
     if verbose
         println("Defining the output fields...")
     end
-    expression::Vector{String} = [
-        "SELECT",
-        join(string.(tables.table_name, ".", tables.column_name), ",\n")
-    ]
+    expression::Vector{String} =
+        ["SELECT", join(string.(tables.table_name, ".", tables.column_name), ",\n")]
     # Extract the traits associated with the requested analyses
     expression_traits = [
         "SELECT DISTINCT traits.name as trait_names",
@@ -479,51 +690,75 @@ function queryanalyses(;
         "JOIN",
         "analyses ON analysis_tags.analysis_id = analyses.id",
         "WHERE",
-        "analyses.name IN (", join(["\$$i" for i in eachindex(analyses)], ","), ")",
+        "analyses.name IN (",
+        join(["\$$i" for i in eachindex(analyses)], ","),
+        ")",
         "ORDER BY traits.name",
     ]
     traits = DataFrame(execute(conn, join(expression_traits, "\n"), analyses)).trait_names
     for trait in traits
         expression[end] = expression[end] * ",\n"
-        push!(expression, "MAX(CASE WHEN traits.name = '$trait' THEN phenotype_data.value END) AS $(cleaunptraitnames(trait))")
+        push!(
+            expression,
+            "MAX(CASE WHEN traits.name = '$trait' THEN phenotype_data.value END) AS $(cleaunptraitnames(trait))",
+        )
     end
     # Define and join the source tables
     if verbose
         println("Defining the source tables...")
     end
-    push!(expression, join([
-        "FROM",
-        "analysis_tags",
-        "JOIN",
-        "phenotype_data ON analysis_tags.entry_id = phenotype_data.entry_id",
-        "JOIN",
-        "entries ON analysis_tags.entry_id = entries.id",
-        "JOIN",
-        "traits ON analysis_tags.trait_id = traits.id",
-        "JOIN",
-        "trials ON analysis_tags.trial_id = trials.id",
-        "JOIN",
-        "layouts ON analysis_tags.layout_id = layouts.id",
-        "JOIN",
-        "analyses ON analysis_tags.analysis_id = analyses.id",
-    ], "\n"))
+    push!(
+        expression,
+        join(
+            [
+                "FROM",
+                "analysis_tags",
+                "JOIN",
+                "phenotype_data ON analysis_tags.entry_id = phenotype_data.entry_id",
+                "JOIN",
+                "entries ON analysis_tags.entry_id = entries.id",
+                "JOIN",
+                "traits ON analysis_tags.trait_id = traits.id",
+                "JOIN",
+                "trials ON analysis_tags.trial_id = trials.id",
+                "JOIN",
+                "layouts ON analysis_tags.layout_id = layouts.id",
+                "JOIN",
+                "analyses ON analysis_tags.analysis_id = analyses.id",
+            ],
+            "\n",
+        ),
+    )
     # Define the filters
     if verbose
         println("Setting the filter expression for analyses...")
     end
     push!(expression, "WHERE")
-    push!(expression, string("analyses.name IN (", join(["\$$i" for i in eachindex(analyses)], ","), ")"))
+    push!(
+        expression,
+        string("analyses.name IN (", join(["\$$i" for i in eachindex(analyses)], ","), ")"),
+    )
     # Define the aggregation columns, i.e. all the fields except the trait fields
     if verbose
         println("Defining the aggregation fields...")
     end
-    push!(expression, string("GROUP BY ", join(string.(tables.table_name, ".", tables.column_name), ",\n")))
+    push!(
+        expression,
+        string(
+            "GROUP BY ",
+            join(string.(tables.table_name, ".", tables.column_name), ",\n"),
+        ),
+    )
     # Optional sorting
     if sort_rows
         if verbose
             println("Sorting the rows...")
         end
-        push!(expression, "ORDER BY ", join(string.(tables.table_name, ".", tables.column_name), ",\n"))
+        push!(
+            expression,
+            "ORDER BY ",
+            join(string.(tables.table_name, ".", tables.column_name), ",\n"),
+        )
     end
     # Parameterised query
     if verbose

@@ -73,18 +73,18 @@ uploadtrialsorphenomes(fname=fname_phenomes, analysis="analysis_4", year=2030, s
 
 ```
 """
-function uploadtrialsorphenomes(; 
+function uploadtrialsorphenomes(;
     fname::String,
     species::String = "unspecified",
-    species_classification::Union{Missing, String} = missing,
-    analysis::Union{Missing, String} = missing,
-    analysis_description::Union{Missing, String} = missing,
-    year::Union{Missing, Int64} = missing,
-    season::Union{Missing, String} = missing, 
-    harvest::Union{Missing, String} = missing, 
-    site::Union{Missing, String} = missing, 
+    species_classification::Union{Missing,String} = missing,
+    analysis::Union{Missing,String} = missing,
+    analysis_description::Union{Missing,String} = missing,
+    year::Union{Missing,Int64} = missing,
+    season::Union{Missing,String} = missing,
+    harvest::Union{Missing,String} = missing,
+    site::Union{Missing,String} = missing,
     sep::String = "\t",
-    verbose::Bool = false
+    verbose::Bool = false,
 )::Nothing
     # genomes = GenomicBreedingCore.simulategenomes(n=10, verbose=false);
     # trials, _ = GenomicBreedingCore.simulatetrials(genomes=genomes, verbose=false);
@@ -103,15 +103,15 @@ function uploadtrialsorphenomes(;
     # verbose = true
     trials_or_phenomes = try
         try
-            readdelimited(Trials, fname=fname, sep=sep, verbose=verbose)
+            readdelimited(Trials, fname = fname, sep = sep, verbose = verbose)
         catch
-            Suppressor.@suppress readjld2(Trials, fname=fname)
+            Suppressor.@suppress readjld2(Trials, fname = fname)
         end
     catch
-        try 
-            readdelimited(Phenomes, fname=fname, sep=sep, verbose=verbose)
+        try
+            readdelimited(Phenomes, fname = fname, sep = sep, verbose = verbose)
         catch
-            Suppressor.@suppress readjld2(Phenomes, fname=fname)
+            Suppressor.@suppress readjld2(Phenomes, fname = fname)
         end
     end
     df = tabularise(trials_or_phenomes)
@@ -203,36 +203,62 @@ function uploadtrialsorphenomes(;
     else
         names(df)[4:end]
     end
-    pb = ProgressMeter.Progress(length(traits)*nrow(df), desc="Uploading data: ")
+    pb = ProgressMeter.Progress(length(traits) * nrow(df), desc = "Uploading data: ")
     for trait in traits
         # trait = traits[1]
-        for i in 1:nrow(df)
+        for i = 1:nrow(df)
             # i = 1
             values = if isa(trials_or_phenomes, Trials)
                 year_from_df = try
                     parse(Int64, df.years[i])
                 catch
-                    throw(ArgumentError("The year in line $i, i.e. `$(df.years[i])` cannot be parsed into Int64."))
-                end    
+                    throw(
+                        ArgumentError(
+                            "The year in line $i, i.e. `$(df.years[i])` cannot be parsed into Int64.",
+                        ),
+                    )
+                end
                 [
-                    df.entries[i], df.populations[i], species, species_classification,
+                    df.entries[i],
+                    df.populations[i],
+                    species,
+                    species_classification,
                     trait,
-                    year_from_df, df.seasons[i], df.harvests[i], df.sites[i],
-                    df.replications[i], df.blocks[i], df.rows[i], df.cols[i],
-                    df[i, trait]
+                    year_from_df,
+                    df.seasons[i],
+                    df.harvests[i],
+                    df.sites[i],
+                    df.replications[i],
+                    df.blocks[i],
+                    df.rows[i],
+                    df.cols[i],
+                    df[i, trait],
                 ]
             else
                 [
-                    df.entries[i], df.populations[i], species, species_classification,
+                    df.entries[i],
+                    df.populations[i],
+                    species,
+                    species_classification,
                     trait,
-                    year, season, harvest, site,
-                    missing, missing, missing, missing,
-                    df[i, trait]
+                    year,
+                    season,
+                    harvest,
+                    site,
+                    missing,
+                    missing,
+                    missing,
+                    missing,
+                    df[i, trait],
                 ]
             end
             execute(conn, expression, values)
             if !ismissing(analysis)
-                execute(conn, expression_add_tag, vcat(values[1:(end-1)], analysis, analysis_description))
+                execute(
+                    conn,
+                    expression_add_tag,
+                    vcat(values[1:(end-1)], analysis, analysis_description),
+                )
             end
             ProgressMeter.next!(pb)
         end

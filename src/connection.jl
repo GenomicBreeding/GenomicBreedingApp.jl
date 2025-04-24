@@ -13,11 +13,13 @@ Establishes a connection to a PostgreSQL database using environment variables.
 - `DB_HOST`: Database host address
 """
 function dbconnect()::LibPQ.Connection
-    db_user = ENV["DB_USER"];
-    db_password = ENV["DB_PASSWORD"];
-    db_name = ENV["DB_NAME"];
-    db_host = ENV["DB_HOST"];
-    conn = LibPQ.Connection("dbname=$db_name user=$db_user password=$db_password host=$db_host")
+    db_user = ENV["DB_USER"]
+    db_password = ENV["DB_PASSWORD"]
+    db_name = ENV["DB_NAME"]
+    db_host = ENV["DB_HOST"]
+    conn = LibPQ.Connection(
+        "dbname=$db_name user=$db_user password=$db_password host=$db_host",
+    )
     return conn
 end
 
