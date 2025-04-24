@@ -173,14 +173,19 @@ include("src/download.jl")
     @in phenotype_data = false
     @in genotype_data = false
   
-    @in ButtonProgress_process = false
+    @in query = false
+    @out progress = false
     # @in ButtonProgress_progress = 0.0
-    @onbutton ButtonProgress_process begin
+    @onbutton query begin
+        progress = true
     #     for ButtonProgress_progress = 1:10
     #         @show ButtonProgress_progress
             sleep(5.0)
     #     end
     #     ButtonProgress_progress = 0.0
+        println(query)
+        progress = false
+        println("Done")
     end
 
 
@@ -427,13 +432,13 @@ function uisearchanddownload()
         p("\t"),
         btn(
             "Query",
-            # @click(:ButtonProgress_process),
-            @click("ButtonProgress_process = true"),
-            # loading = :ButtonProgress_process,
+            @click(:query),
+            # @click("query = true"),
+            # loading = :query,
             # percentage = :ButtonProgress_progress,
             color = "green",
         ),
-        spinner(:hourglass, color = "green", size = "3em", loading = :ButtonProgress_process),
+        spinner(:hourglass, color = "green", size = "3em", @iif("progress == true")),
         separator(color = "primary"),
 
         table(
