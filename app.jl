@@ -291,7 +291,7 @@ function uibasetables()
                 :table_base_analyses,
                 flat = false,
                 bordered = true,
-                var"row-key" = "name",
+                var"row-key" = ["name", "description"],
                 filter = :table_base_analyses_filter,
                 template(
                     var"v-slot:top-right" = "",
@@ -311,7 +311,7 @@ function uibasetables()
                 :table_base_traits,
                 flat = false,
                 bordered = true,
-                var"row-key" = "name",
+                var"row-key" = ["name", "description"],
                 filter = :table_base_traits_filter,
                 template(
                     var"v-slot:top-right" = "",
@@ -331,7 +331,7 @@ function uibasetables()
                 :table_base_entries,
                 flat = false,
                 bordered = true,
-                var"row-key" = "name",
+                var"row-key" = ["name", "species", "classification", "population"],
                 filter = :table_base_entries_filter,
                 template(
                     var"v-slot:top-right" = "",
@@ -351,7 +351,7 @@ function uibasetables()
                 :table_base_trials,
                 flat = false,
                 bordered = true,
-                var"row-key" = "name",
+                var"row-key" = ["year", "season", "harvest", "site", "description"],
                 filter = :table_base_trials_filter,
                 template(
                     var"v-slot:top-right" = "",
@@ -371,7 +371,7 @@ function uibasetables()
                 :table_base_layouts,
                 flat = false,
                 bordered = true,
-                var"row-key" = "name",
+                var"row-key" = ["replication", "block", "row", "col"],
                 filter = :table_base_layouts_filter,
                 template(
                     var"v-slot:top-right" = "",
