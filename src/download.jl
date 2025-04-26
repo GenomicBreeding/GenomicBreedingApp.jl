@@ -242,28 +242,36 @@ function addfilters!(
     table::String,
     column::String,
     values::Union{
-        Vector{String},
-        Vector{Float64},
+        Vector{Union{String, Missing}},
+        Vector{Union{Float64, Missing}},
+        Vector{Union{Int64, Missing}},
         Tuple{Float64,Float64},
-        Vector{Int64},
         Tuple{Int64,Int64},
     },
 )::Nothing
     push!(expression, "(")
-    if isa(values, Vector{String})
-        values = replace.(values, "*" => "%")
+    if isa(values, Vector{Union{String, Missing}})
         for i in eachindex(values)
             # i = 2
-            counter[1] += 1
-            push!(parameters, values[i])
-            push!(expression, "($table.$column LIKE \$$(counter[1])) OR")
+            if !ismissing(values[i])
+                counter[1] += 1
+                values[i] = replace(values[i], "*" => "%")
+                push!(parameters, values[i])
+                push!(expression, "($table.$column LIKE \$$(counter[1])) OR")
+            else
+                push!(expression, "($table.$column IS NULL) OR")
+            end
         end
-    elseif isa(values, Vector{Float64}) || isa(values, Vector{Int64})
+    elseif isa(values, Vector{Union{Float64, Missing}}) || isa(values, Vector{Union{Int64, Missing}})
         for i in eachindex(values)
             # i = 2
-            counter[1] += 1
-            push!(parameters, values[i])
-            push!(expression, "($table.$column = \$$(counter[1])) OR")
+            if !ismissing(values[i])
+                counter[1] += 1
+                push!(parameters, values[i])
+                push!(expression, "($table.$column = \$$(counter[1])) OR")
+            else
+                push!(expression, "($table.$column IS NULL) OR")
+            end
         end
     else
         # Two-element tuple
@@ -301,18 +309,18 @@ end
 """
     querytrialsandphenomes(;
         traits::Vector{String},
-        species::Union{Missing, Vector{String}} = missing,
-        classifications::Union{Missing, Vector{String}} = missing,
-        populations::Union{Missing, Vector{String}} = missing,
-        entries::Union{Missing, Vector{String}} = missing,
-        years::Union{Missing, Tuple{Int64, Int64}, Vector{Int64}} = missing,
-        seasons::Union{Missing, Vector{String}} = missing,
-        harvests::Union{Missing, Vector{String}} = missing,
-        sites::Union{Missing, Vector{String}} = missing,
-        blocks::Union{Missing, Vector{String}} = missing,
-        rows::Union{Missing, Vector{String}} = missing,
-        cols::Union{Missing, Vector{String}} = missing,
-        replications::Union{Missing, Vector{String}} = missing,
+        species::Union{Missing,Vector{Union{String, Missing}}} = missing,
+        classifications::Union{Missing,Vector{Union{String, Missing}}} = missing,
+        populations::Union{Missing,Vector{Union{String, Missing}}} = missing,
+        entries::Union{Missing,Vector{Union{String, Missing}}} = missing,
+        years::Union{Missing,Tuple{Int64,Int64},Vector{Union{Int64, Missing}}} = missing,
+        seasons::Union{Missing,Vector{Union{String, Missing}}} = missing,
+        harvests::Union{Missing,Vector{Union{String, Missing}}} = missing,
+        sites::Union{Missing,Vector{Union{String, Missing}}} = missing,
+        blocks::Union{Missing,Vector{Union{String, Missing}}} = missing,
+        rows::Union{Missing,Vector{Union{String, Missing}}} = missing,
+        cols::Union{Missing,Vector{Union{String, Missing}}} = missing,
+        replications::Union{Missing,Vector{Union{String, Missing}}} = missing,
         sort_rows::Bool = true,
         verbose::Bool = false
     )::DataFrame
@@ -341,7 +349,24 @@ A DataFrame containing the queried trial and phenotype data with columns for all
 
 # Examples
 ```julia
+querytrialsandphenomes(
+    traits=traits,
+    species=species,
+    classifications=classifications,
+    populations=populations,
+    entries=entries,
+    years=years,
+    seasons=seasons,
+    harvests=harvests,
+    sites=sites,
+    blocks=blocks,
+    rows=rows,
+    cols=cols,
+    replications=replications,
+    verbose=true
+)
 querytrialsandphenomes(traits = ["trait_1"], verbose=true)
+querytrialsandphenomes(traits = ["trait_1"], species=["missing"], classifications=["missing"], entries=["entry_01","entry_09"], verbose=true)
 querytrialsandphenomes(traits = ["trait_1", "trait_3"], entries=["entry_06"], verbose=true)
 querytrialsandphenomes(traits = ["trait_1", "trait_3"], entries=["entry_06", "entry_03"], seasons=["season_1", "season_4"], verbose=true)
 querytrialsandphenomes(traits = ["trait_1", "trait_3"], entries=["entry_06", "entry_03"], seasons=["season_3"], years=(2000, 3000), verbose=true)
@@ -350,18 +375,18 @@ querytrialsandphenomes(traits = ["trait_1", "trait_3"], entries=["entry_06", "en
 """
 function querytrialsandphenomes(;
     traits::Vector{String},
-    species::Union{Missing,Vector{String}} = missing,
-    classifications::Union{Missing,Vector{String}} = missing,
-    populations::Union{Missing,Vector{String}} = missing,
-    entries::Union{Missing,Vector{String}} = missing,
-    years::Union{Missing,Tuple{Int64,Int64},Vector{Int64}} = missing,
-    seasons::Union{Missing,Vector{String}} = missing,
-    harvests::Union{Missing,Vector{String}} = missing,
-    sites::Union{Missing,Vector{String}} = missing,
-    blocks::Union{Missing,Vector{String}} = missing,
-    rows::Union{Missing,Vector{String}} = missing,
-    cols::Union{Missing,Vector{String}} = missing,
-    replications::Union{Missing,Vector{String}} = missing,
+    species::Union{Missing,Vector{Union{String, Missing}}} = missing,
+    classifications::Union{Missing,Vector{Union{String, Missing}}} = missing,
+    populations::Union{Missing,Vector{Union{String, Missing}}} = missing,
+    entries::Union{Missing,Vector{Union{String, Missing}}} = missing,
+    years::Union{Missing,Tuple{Int64,Int64},Vector{Union{Int64, Missing}}} = missing,
+    seasons::Union{Missing,Vector{Union{String, Missing}}} = missing,
+    harvests::Union{Missing,Vector{Union{String, Missing}}} = missing,
+    sites::Union{Missing,Vector{Union{String, Missing}}} = missing,
+    blocks::Union{Missing,Vector{Union{String, Missing}}} = missing,
+    rows::Union{Missing,Vector{Union{String, Missing}}} = missing,
+    cols::Union{Missing,Vector{Union{String, Missing}}} = missing,
+    replications::Union{Missing,Vector{Union{String, Missing}}} = missing,
     sort_rows::Bool = true,
     verbose::Bool = false,
 )::DataFrame
@@ -411,7 +436,7 @@ function querytrialsandphenomes(;
             # trait = replace.(traits, "*" => "%")[1]
             # If there is no '%' in trait then 'LIKE' is equivalent to '='
             res = DataFrame(
-                execute(conn, "SELECT name FROM traits WHERE name LIKE \$1", [trait]),
+                execute(conn, "SELECT name FROM traits WHERE name = \$1", [trait]),
             )
             if nrow(res) > 0
                 matches = vcat(matches, res.name)
@@ -660,7 +685,7 @@ queryanalyses(analyses=["analysis_3", "analysis_4"], verbose=true)
 ```
 """
 function queryanalyses(;
-    analyses::Vector{String},
+    analyses::Vector{Union{String, Missing}},
     sort_rows::Bool = true,
     verbose::Bool = false,
 )::DataFrame
@@ -775,4 +800,24 @@ function queryanalyses(;
     close(conn)
     # Output
     DataFrame(res)
+end
+
+"""
+    df_to_io(df)
+
+Convert a DataFrame to a CSV-formatted byte vector.
+
+Takes a DataFrame `df` and serializes it to a tab-delimited CSV format in memory.
+Returns the contents as a Vector{UInt8}.
+
+# Arguments
+- `df`: The DataFrame to convert to CSV format
+
+# Returns
+- `Vector{UInt8}`: The CSV data as a byte vector
+"""
+function df_to_io(df)
+    io = IOBuffer()
+    CSV.write(io, df, delim='\t')
+    take!(io)
 end

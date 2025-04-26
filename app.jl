@@ -1,6 +1,6 @@
 module GenomicBreedingApp
 
-using DotEnv, LibPQ, Tables
+using DotEnv, LibPQ, Tables, CSV, StippleDownloads
 using GenieFramework
 using DataFrames, StatsBase
 using GenomicBreedingCore, GenomicBreedingIO
@@ -18,10 +18,10 @@ include("src/download.jl")
     @in tab_selected_main = "search_and_download"
     @in tab_selected_queries = "base_tables"
 
-    #####################################################################################################################
-    # Base  tables
+#####################################################################################################################
+# Base  tables
     df_analyses = string.(sort(querytable("analyses", fields=["name", "description"])))
-    df_entries = string.(sort(querytable("entries", fields=["name", "description"])))
+    df_entries = string.(sort(querytable("entries", fields=["name", "species", "classification", "population", "description"])))
     df_traits = string.(sort(querytable("traits", fields=["name", "description"])))
     df_trials = string.(sort(querytable("trials", fields=["year", "season", "harvest", "site", "description"])))
     df_layouts = string.(sort(querytable("layouts", fields=["replication", "block", "row", "col"])))
@@ -40,8 +40,8 @@ include("src/download.jl")
 
     @out table_base_layouts = DataTable(df_layouts)
     @in table_base_layouts_filter = ""
-    #####################################################################################################################
-    # Analyses
+#####################################################################################################################
+# Analyses
     analyses_list = df_analyses.name
     @in analyses_filter_text = ""             # Input from the text field
     @in analyses_selected_options::Union{Nothing, Vector{String}} = nothing # Input from the select component
@@ -59,16 +59,35 @@ include("src/download.jl")
     @in query_analyses = false
     @out progress_analyses = false
     @onbutton query_analyses begin
-        if isnothing(analyses_selected_options)
-            analyses_selected_options = analyses_list
+        analyses::Vector{Union{String, Missing}} = if isnothing(analyses_selected_options)
+            [x == "missing" ? missing : x for x in analyses_list]
+        else
+            analyses_selected_options
         end
         progress_analyses = true
-        table_query_analyses = DataTable(queryanalyses(analyses=analyses_selected_options, verbose=true))
+        table_query_analyses = DataTable(queryanalyses(analyses=analyses, verbose=true))
         progress_analyses = false
     end
-    #####################################################################################################################
+    @event download_analyses begin
+        download_binary(__model__, df_to_io(table_query_analyses.data), "analyses_data.txt", )
+    end
+#####################################################################################################################
+# Entries-by-Trials-by-Layouts
+    # Traits
+    traits_list = df_traits.name
+    @in traits_filter_text = ""             # Input from the text field
+    @in traits_selected_options::Union{Nothing, Vector{String}} = nothing
+    @in traits_filtered_options = traits_list   # Output/state: starts with all options
+    @onchange traits_filter_text begin
+        search_term = lowercase(traits_filter_text)
+        if isempty(search_term)
+            traits_filtered_options = traits_list
+        else
+            traits_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), traits_list)
+        end
+    end
     # Species
-    species_list = df_entries.name
+    species_list = sort(unique(df_entries.species))
     @in species_filter_text = ""             # Input from the text field
     @in species_selected_options::Union{Nothing, Vector{String}} = nothing
     @in species_filtered_options = species_list   # Output/state: starts with all options
@@ -81,7 +100,7 @@ include("src/download.jl")
         end
     end
     # Classifications
-    classifications_list = df_entries.name
+    classifications_list = sort(unique(df_entries.classification))
     @in classifications_filter_text = ""             # Input from the text field
     @in classifications_selected_options::Union{Nothing, Vector{String}} = nothing
     @in classifications_filtered_options = classifications_list   # Output/state: starts with all options
@@ -94,7 +113,7 @@ include("src/download.jl")
         end
     end
     # Populations
-    populations_list = df_entries.name
+    populations_list = sort(unique(df_entries.population))
     @in populations_filter_text = ""             # Input from the text field
     @in populations_selected_options::Union{Nothing, Vector{String}} = nothing
     @in populations_filtered_options = populations_list   # Output/state: starts with all options
@@ -117,19 +136,6 @@ include("src/download.jl")
             entries_filtered_options = entries_list
         else
             entries_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), entries_list)
-        end
-    end
-    # Traits
-    traits_list = df_traits.name
-    @in traits_filter_text = ""             # Input from the text field
-    @in traits_selected_options::Union{Nothing, Vector{String}} = nothing
-    @in traits_filtered_options = traits_list   # Output/state: starts with all options
-    @onchange traits_filter_text begin
-        search_term = lowercase(traits_filter_text)
-        if isempty(search_term)
-            traits_filtered_options = traits_list
-        else
-            traits_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), traits_list)
         end
     end
     # Years
@@ -236,44 +242,57 @@ include("src/download.jl")
             cols_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), cols_list)
         end
     end
+    # Query
+    @in phenotype_data = "yes"
+    @in genotype_data = "no" # TODO: use when genotype data tables have been added
     @out table_query_entries = DataTable()
     @in table_query_entries_filter = ""
     @in query_entries = false
     @out progress_entries = false
     @onbutton query_entries begin
-        if isnothing(traits_selected_options)
-            traits_selected_options = traits_list
+        if phenotype_data == "yes"
+            progress_entries = true
+            traits::Vector{String} = isnothing(traits_selected_options) ? traits_list : traits_selected_options
+            species::Vector{Union{String, Missing}} = isnothing(species_selected_options) ? [x == "missing" ? missing : x for x in species_list] : [x == "missing" ? missing : x for x in species_selected_options]
+                classifications::Vector{Union{String, Missing}} = isnothing(classifications_selected_options) ? [x == "missing" ? missing : x for x in classifications_list] : [x == "missing" ? missing : x for x in classifications_selected_options]
+                populations::Vector{Union{String, Missing}} = isnothing(populations_selected_options) ? [x == "missing" ? missing : x for x in populations_list] : [x == "missing" ? missing : x for x in populations_selected_options]
+                entries::Vector{Union{String, Missing}} = isnothing(entries_selected_options) ? [x == "missing" ? missing : x for x in entries_list] : [x == "missing" ? missing : x for x in entries_selected_options]
+                years::Vector{Union{Missing, Int64}} = isnothing(years_selected_options) ? [x == "missing" ? missing : parse(Int64, x) for x in years_list] : [x == "missing" ? missing : parse(Int64, x) for x in years_selected_options]
+                seasons::Vector{Union{String, Missing}} = isnothing(seasons_selected_options) ? [x == "missing" ? missing : x for x in seasons_list] : [x == "missing" ? missing : x for x in seasons_selected_options]
+                harvests::Vector{Union{String, Missing}} = isnothing(harvests_selected_options) ? [x == "missing" ? missing : x for x in harvests_list] : [x == "missing" ? missing : x for x in harvests_selected_options]
+                sites::Vector{Union{String, Missing}} = isnothing(sites_selected_options) ? [x == "missing" ? missing : x for x in sites_list] : [x == "missing" ? missing : x for x in sites_selected_options]
+                replications::Vector{Union{String, Missing}} = isnothing(replications_selected_options) ? [x == "missing" ? missing : x for x in replications_list] : [x == "missing" ? missing : x for x in replications_selected_options]
+                blocks::Vector{Union{String, Missing}} = isnothing(blocks_selected_options) ? [x == "missing" ? missing : x for x in blocks_list] : [x == "missing" ? missing : x for x in blocks_selected_options]
+                rows::Vector{Union{String, Missing}} = isnothing(rows_selected_options) ? [x == "missing" ? missing : x for x in rows_list] : [x == "missing" ? missing : x for x in rows_selected_options]            
+                cols::Vector{Union{String, Missing}} = isnothing(cols_selected_options) ? [x == "missing" ? missing : x for x in cols_list] : [x == "missing" ? missing : x for x in cols_selected_options]            
+                table_query_entries = DataTable(querytrialsandphenomes(
+                    traits = traits, # cannot be missing
+                    species = species,
+                    classifications = classifications,
+                    populations = populations,
+                    entries = entries,
+                    years = years, # TODO: Add option to add range of years
+                    seasons = seasons,
+                    harvests = harvests,
+                    sites = sites,
+                    replications = replications,
+                    blocks = blocks,
+                    rows = rows,
+                    cols = cols,
+                    verbose = true,
+                ))
+                progress_entries = false
+        else
+            table_query_entries = DataTable(DataFrame(var"Phenotypes not requested"="no phenotype data requested"))
         end
-        species = isnothing(species_selected_options) ? missing : species_selected_options
-        classifications = isnothing(classifications_selected_options) ? missing : classifications_selected_options
-        populations = isnothing(populations_selected_options) ? missing : populations_selected_options
-        entries = isnothing(entries_selected_options) ? missing : entries_selected_options
-        years = isnothing(years_selected_options) ? missing : years_selected_options
-        seasons = isnothing(seasons_selected_options) ? missing : seasons_selected_options
-        harvests = isnothing(harvests_selected_options) ? missing : harvests_selected_options
-        sites = isnothing(sites_selected_options) ? missing : sites_selected_options
-        blocks = isnothing(blocks_selected_options) ? missing : blocks_selected_options
-        rows = isnothing(rows_selected_options) ? missing : rows_selected_options
-        cols = isnothing(cols_selected_options) ? missing : cols_selected_options
-        replications = isnothing(replications_selected_options) ? missing : replications_selected_options
-        progress_entries = true
-        table_query_entries = DataTable(querytrialsandphenomes(
-            traits = traits_selected_options,
-            species = species,
-            classifications = classifications,
-            populations = populations,
-            entries = entries,
-            years = years,
-            seasons = seasons,
-            harvests = harvests,
-            sites = sites,
-            blocks = blocks,
-            rows = rows,
-            cols = cols,
-            replications = replications,
-            verbose = true,
-        ))
-        progress_entries = false
+        if genotype_data == "yes"
+            println("Genotype data query not implemented yet")
+        else
+            println("No genotype data requested")
+        end
+    end
+    @event download_entries begin
+        download_binary(__model__, df_to_io(table_query_entries.data), "entries_data.txt", )
     end
 end
 
@@ -391,6 +410,16 @@ end
 
 function uiqueryanalyses()
     [
+        btn(
+            "Query",
+            @click(:query_analyses),
+            # @click("query_analyses = true"),
+            # loading = :query_analyses,
+            # percentage = :ButtonProgress_progress,
+            color = "green",
+        ),
+        spinner(:hourglass, color = "green", size = "3em", @iif("progress_analyses == true")),
+        p("\t"),
         textfield(
             "Analyses",
             @bind(:analyses_filter_text),
@@ -408,16 +437,7 @@ function uiqueryanalyses()
             counter = true,
             dense = true,
         ),
-        p("\t"),
-        btn(
-            "Query",
-            @click(:query_analyses),
-            # @click("query_analyses = true"),
-            # loading = :query_analyses,
-            # percentage = :ButtonProgress_progress,
-            color = "green",
-        ),
-        spinner(:hourglass, color = "green", size = "3em", @iif("progress_analyses == true")),
+        btn("Download", icon = "download", @on(:click, :download_analyses), color = "primary", nocaps = true),
         separator(color = "primary"),
         table(
             :table_query_analyses,
@@ -444,6 +464,33 @@ end
 
 function uisqueryentries()
     [
+        btn(
+            "Query",
+            @click(:query_entries),
+            # @click("query_entries = true"),
+            # loading = :query_entries,
+            # percentage = :ButtonProgress_progress,
+            color = "green",
+        ),
+        spinner(:hourglass, color = "green", size = "3em", @iif("progress_entries == true")),
+        p("\t"),
+        textfield(
+            "Traits",
+            @bind(:traits_filter_text),
+            outlined=true,
+            dense=true,
+            clearable=true,
+            rounded=true,
+        ),
+        Stipple.select(
+            :traits_selected_options,
+            options=:traits_filtered_options,
+            multiple = true,
+            clearable = true,
+            usechips = true,
+            counter = true,
+            dense = true,
+        ),
         row([
             column(size = 2, [
                 textfield(
@@ -455,7 +502,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :species_selected_option,
+                    :species_selected_options,
                     options=:species_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -472,7 +519,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :classifications_selected_option,
+                    :classifications_selected_options,
                     options=:classifications_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -489,7 +536,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :populations_selected_option,
+                    :populations_selected_options,
                     options=:populations_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -501,16 +548,16 @@ function uisqueryentries()
             column(size = 1),
             column(size = 2, [
                 textfield(
-                    "Traits",
-                    @bind(:traits_filter_text),
+                    "Entries",
+                    @bind(:entries_filter_text),
                     outlined=true,
                     dense=true,
                     clearable=true,
                     rounded=true,
                 ),
                 Stipple.select(
-                    :traits_selected_option,
-                    options=:traits_filtered_options,
+                    :entries_selected_options,
+                    options=:entries_filtered_options,
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -526,7 +573,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :years_selected_option,
+                    :years_selected_options,
                     options=:years_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -543,7 +590,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :seasons_selected_option,
+                    :seasons_selected_options,
                     options=:seasons_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -554,7 +601,7 @@ function uisqueryentries()
             ]),
             column(size = 1),
             column(size = 2, [
-                    textfield(
+                textfield(
                     "Harvests",
                     @bind(:harvests_filter_text),
                     outlined=true,
@@ -563,7 +610,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :harvests_selected_option,
+                    :harvests_selected_options,
                     options=:harvests_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -580,7 +627,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :sites_selected_option,
+                    :sites_selected_options,
                     options=:sites_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -597,7 +644,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :replications_selected_option,
+                    :replications_selected_options,
                     options=:replications_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -617,7 +664,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :blocks_selected_option,
+                    :blocks_selected_options,
                     options=:blocks_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -634,7 +681,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :rows_selected_option,
+                    :rows_selected_options,
                     options=:rows_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -651,7 +698,7 @@ function uisqueryentries()
                     rounded=true,
                 ),
                 Stipple.select(
-                    :cols_selected_option,
+                    :cols_selected_options,
                     options=:cols_filtered_options,
                     multiple = true,
                     clearable = true,
@@ -661,26 +708,17 @@ function uisqueryentries()
                 ),
             ]),
         ]),
-        toggle("Include phenotype data?", :phenotype_data, color = "green"),
-        toggle("Include genotype data?", :genotype_data, color = "blue"),
+        toggle("Include phenotype data?", :phenotype_data, color = "green", var"true-value" = "yes", var"false-value" = "no",),
+        toggle("Include genotype data?", :genotype_data, color = "blue", var"true-value" = "yes", var"false-value" = "no",),
         p("\t"),
-        btn(
-            "Query",
-            @click(:query_entries),
-            # @click("query_entries = true"),
-            # loading = :query_entries,
-            # percentage = :ButtonProgress_progress,
-            color = "green",
-        ),
-        spinner(:hourglass, color = "green", size = "3em", @iif("progress_entries == true")),
+        btn("Download", icon = "download", @on(:click, :download_entries), color = "primary", nocaps = true),
         separator(color = "primary"),
-
         table(
             :table_query_entries,
             flat = true,
             bordered = true,
             title = "Entries",
-            var"row-key" = "name",
+            var"row-key" = ["species", "classification", "name", "population", "year", "season", "harvest", "site", "replication", "block", "row", "col"],
             filter = :table_query_entries_filter,
             template(
                 var"v-slot:top-right" = "",
