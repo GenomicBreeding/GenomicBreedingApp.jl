@@ -1,16 +1,13 @@
 module GenomicBreedingApp
 
-using DotEnv, LibPQ, Tables, CSV, StippleDownloads
+using StatsBase, DataFrames, Tables, CSV, StippleDownloads
+using PlotlyBase
 using GenieFramework
-using DataFrames, StatsBase
 using GenomicBreedingCore, GenomicBreedingIO
-using Suppressor, ProgressMeter
+# Make sure the PostgreSQL database is running (see https://github.com/GenomicBreeding/GenomicBreedingDB.jl)
+using GenomicBreedingDB, DotEnv
 # Load database credentials
 DotEnv.load!(joinpath(homedir(), ".env"))
-# Load functions
-include("src/connection.jl")
-include("src/upload.jl")
-include("src/download.jl")
 # Import all necessary GenieFramework.jl components
 @genietools
 # Define the reactive parts of the app (i.e. the inputs and outputs)
@@ -19,7 +16,7 @@ include("src/download.jl")
     @in tab_selected_queries = "base_tables"
 
 #####################################################################################################################
-# Base  tables
+# Base tables
     df_analyses = string.(sort(querytable("analyses", fields=["name", "description"])))
     df_entries = string.(sort(querytable("entries", fields=["name", "species", "classification", "population", "description"])))
     df_traits = string.(sort(querytable("traits", fields=["name", "description"])))
@@ -28,18 +25,34 @@ include("src/download.jl")
 
     @out table_base_analyses = DataTable(df_analyses)
     @in table_base_analyses_filter = ""
+    @event download_base_analyses begin
+        download_binary(__model__, df_to_io(table_base_analyses.data), "analyses_table.txt", )
+    end
 
     @out table_base_traits = DataTable(df_traits)
     @in table_base_traits_filter = ""
+    @event download_base_traits begin
+        download_binary(__model__, df_to_io(table_base_traits.data), "traits_table.txt", )
+    end
 
     @out table_base_entries = DataTable(df_entries)
     @in table_base_entries_filter = ""
+    @event download_base_entries begin
+        download_binary(__model__, df_to_io(table_base_entries.data), "entries_table.txt", )
+    end
 
     @out table_base_trials = DataTable(df_trials)
     @in table_base_trials_filter = ""
+    @event download_base_trials begin
+        download_binary(__model__, df_to_io(table_base_trials.data), "trials_table.txt", )
+    end
 
     @out table_base_layouts = DataTable(df_layouts)
     @in table_base_layouts_filter = ""
+    @event download_base_layouts begin
+        download_binary(__model__, df_to_io(table_base_layouts.data), "layouts_table.txt", )
+    end
+
 #####################################################################################################################
 # Analyses
     analyses_list = df_analyses.name
@@ -294,6 +307,35 @@ include("src/download.jl")
     @event download_entries begin
         download_binary(__model__, df_to_io(table_query_entries.data), "entries_data.txt", )
     end
+######################################################################################################################
+# Plots
+    # ptrace1 = scatter(
+    #     x=[1, 2, 3, 4],
+    #     y=[10, 15, 13, 17],
+    #     mode="markers",
+    #     name="Trace 1"
+    # )
+    # ptrace2 = scatter(
+    #     x=[1, 2, 3, 4],
+    #     y=[5, 9, 11, 12],
+    #     mode="lines+markers",
+    #     name="Trace 2",
+    #     line=attr(color="red")
+    # )
+    # playout = PlotlyBase.Layout(
+    #     title="A Scatter Plot with Multiple Traces",
+    #     xaxis=attr(
+    #         title="X Axis Label",
+    #         showgrid=false
+    #     ),
+    #     yaxis=attr(
+    #         title="Y Axis Label",
+    #         showgrid=true,
+    #         range=[0, 20]
+    #     )
+    # )
+    # @out plotdata = [ptrace1, ptrace2] # this should always be an array, even if there's only one trace
+    # @out plotplayout = layout
 end
 
 
@@ -306,7 +348,8 @@ end
 function uibasetables()
     [
         expansionitem(label="Analyses", [
-            table(
+            btn("Download Analyses Table", icon = "download", @on(:click, :download_base_analyses), color = "primary", nocaps = true),
+            Stipple.table(
                 :table_base_analyses,
                 flat = false,
                 bordered = true,
@@ -326,7 +369,8 @@ function uibasetables()
             ),
         ]),
         expansionitem(label="Traits", [
-            table(
+            btn("Download Traits Table", icon = "download", @on(:click, :download_base_traits), color = "primary", nocaps = true),
+            Stipple.table(
                 :table_base_traits,
                 flat = false,
                 bordered = true,
@@ -346,7 +390,8 @@ function uibasetables()
             ),
         ]),
         expansionitem(label="Entries", [
-            table(
+            btn("Download Entries Table", icon = "download", @on(:click, :download_base_entries), color = "primary", nocaps = true),
+            Stipple.table(
                 :table_base_entries,
                 flat = false,
                 bordered = true,
@@ -366,7 +411,8 @@ function uibasetables()
             ),
         ]),
         expansionitem(label="Trials", [
-            table(
+            btn("Download Trials Table", icon = "download", @on(:click, :download_base_trials), color = "primary", nocaps = true),
+            Stipple.table(
                 :table_base_trials,
                 flat = false,
                 bordered = true,
@@ -386,7 +432,8 @@ function uibasetables()
             ),
         ]),
         expansionitem(label="Layouts", [
-            table(
+            btn("Download Layouts Table", icon = "download", @on(:click, :download_base_layouts), color = "primary", nocaps = true),
+            Stipple.table(
                 :table_base_layouts,
                 flat = false,
                 bordered = true,
@@ -439,7 +486,7 @@ function uiqueryanalyses()
         ),
         btn("Download", icon = "download", @on(:click, :download_analyses), color = "primary", nocaps = true),
         separator(color = "primary"),
-        table(
+        Stipple.table(
             :table_query_analyses,
             pagination = :TablePagination_tpagination,
             flat = true,
@@ -713,7 +760,7 @@ function uisqueryentries()
         p("\t"),
         btn("Download", icon = "download", @on(:click, :download_entries), color = "primary", nocaps = true),
         separator(color = "primary"),
-        table(
+        Stipple.table(
             :table_query_entries,
             flat = true,
             bordered = true,
@@ -799,6 +846,7 @@ function ui()
             [
                 tabpanel(name = "search_and_download", uisearchanddownload()),
                 tabpanel(name = "analyse_and_plot", [p("Analyse/Plot Tab")]),
+                # tabpanel(name = "analyse_and_plot", [StipplePlotly.plot(:plotdata, layout=:plotlayout)]),
                 tabpanel(name = "upload_and_validate", [p("Upload/Validate Tab")]),
             ],
         ),
