@@ -26,6 +26,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
     @out table_base_analyses = DataTable(df_analyses)
     @in table_base_analyses_filter = ""
     @event download_base_analyses begin
+        println("Downloading base analyses")
         download_binary(__model__, df_to_io(table_base_analyses.data), "analyses_table.txt", )
     end
 
