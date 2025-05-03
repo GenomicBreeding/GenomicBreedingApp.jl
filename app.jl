@@ -271,7 +271,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 classifications::Vector{Union{String, Missing}} = isnothing(classifications_selected_options) ? [x == "missing" ? missing : x for x in classifications_list] : [x == "missing" ? missing : x for x in classifications_selected_options]
                 populations::Vector{Union{String, Missing}} = isnothing(populations_selected_options) ? [x == "missing" ? missing : x for x in populations_list] : [x == "missing" ? missing : x for x in populations_selected_options]
                 entries::Vector{Union{String, Missing}} = isnothing(entries_selected_options) ? [x == "missing" ? missing : x for x in entries_list] : [x == "missing" ? missing : x for x in entries_selected_options]
-                years::Vector{Union{Missing, Int64}} = isnothing(years_selected_options) ? [x == "missing" ? missing : parse(Int64, x) for x in years_list] : [x == "missing" ? missing : parse(Int64, x) for x in years_selected_options]
+                years::Vector{Union{Missing, String}} = isnothing(years_selected_options) ? [x == "missing" ? missing : x for x in years_list] : [x == "missing" ? missing : x for x in years_selected_options]
                 seasons::Vector{Union{String, Missing}} = isnothing(seasons_selected_options) ? [x == "missing" ? missing : x for x in seasons_list] : [x == "missing" ? missing : x for x in seasons_selected_options]
                 harvests::Vector{Union{String, Missing}} = isnothing(harvests_selected_options) ? [x == "missing" ? missing : x for x in harvests_list] : [x == "missing" ? missing : x for x in harvests_selected_options]
                 sites::Vector{Union{String, Missing}} = isnothing(sites_selected_options) ? [x == "missing" ? missing : x for x in sites_list] : [x == "missing" ? missing : x for x in sites_selected_options]
@@ -285,7 +285,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                     classifications = classifications,
                     populations = populations,
                     entries = entries,
-                    years = years, # TODO: Add option to add range of years
+                    years = years,
                     seasons = seasons,
                     harvests = harvests,
                     sites = sites,
@@ -348,7 +348,7 @@ end
 
 function uibasetables()
     [
-        expansionitem(label="Analyses", [
+        expansionitem(label="Analyses", expandseparator=true, [
             btn("Download Analyses Table", icon = "download", @on(:click, :download_base_analyses), color = "primary", nocaps = true),
             Stipple.table(
                 :table_base_analyses,
@@ -369,7 +369,8 @@ function uibasetables()
                 ),
             ),
         ]),
-        expansionitem(label="Traits", [
+        separator(color = "primary"),
+        expansionitem(label="Traits", expandseparator=true, [
             btn("Download Traits Table", icon = "download", @on(:click, :download_base_traits), color = "primary", nocaps = true),
             Stipple.table(
                 :table_base_traits,
@@ -390,7 +391,8 @@ function uibasetables()
                 ),
             ),
         ]),
-        expansionitem(label="Entries", [
+        separator(color = "primary"),
+        expansionitem(label="Entries", expandseparator=true, [
             btn("Download Entries Table", icon = "download", @on(:click, :download_base_entries), color = "primary", nocaps = true),
             Stipple.table(
                 :table_base_entries,
@@ -411,7 +413,8 @@ function uibasetables()
                 ),
             ),
         ]),
-        expansionitem(label="Trials", [
+        separator(color = "primary"),
+        expansionitem(label="Trials", expandseparator=true, [
             btn("Download Trials Table", icon = "download", @on(:click, :download_base_trials), color = "primary", nocaps = true),
             Stipple.table(
                 :table_base_trials,
@@ -432,7 +435,8 @@ function uibasetables()
                 ),
             ),
         ]),
-        expansionitem(label="Layouts", [
+        separator(color = "primary"),
+        expansionitem(label="Layouts", expandseparator=true, [
             btn("Download Layouts Table", icon = "download", @on(:click, :download_base_layouts), color = "primary", nocaps = true),
             Stipple.table(
                 :table_base_layouts,
@@ -789,7 +793,8 @@ function uisearchanddownload()
             :tab_selected_queries,
             align = "justify",
             inlinelabel = true,
-            class = "bg-primary text-white shadow-2",
+            class = "bg-blue text-white shadow-2 size=20",
+            activecolorbg = "red",
             [
                 tab(
                     name = "base_tables",
@@ -824,7 +829,8 @@ function ui()
             :tab_selected_main,
             align = "justify",
             inlinelabel = true,
-            class = "bg-primary text-white shadow-2",
+            class = "bg-green text-white shadow-2",
+            activecolorbg = "red",
             [
                 tab(
                     name = "search_and_download",
