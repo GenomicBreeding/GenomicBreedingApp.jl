@@ -386,7 +386,31 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             (plots_vector, plots_layout)
         elseif selected_plot_type == ["scatter"]
             println("Plotting scatter plot")
-
+            plots_vector = []
+            x = df[1][!, selected_plot_traits[1]]
+            for t in selected_plot_traits
+                try 
+                    df[1][!, t]
+                catch
+                    continue
+                end
+                y = df[1][!, t]
+                idx = []
+                for i in 1:length(x)
+                    if !isnothing(x[i]) && !ismissing(x[i]) && !isinf(x[i]) && !isnothing(y[i]) && !ismissing(y[i]) && !isinf(y[i])
+                        push!(idx, i)
+                    end
+                end
+                if length(idx) < 1
+                    continue
+                end
+                # Scatter plot with itself
+                if length(selected_plot_traits) == 1
+                    push!(plots_vector, PlotlyBase.scatter(x=x[idx], y=x[idx], name="$t vs $t"))
+                else
+                    push!(plots_vector, PlotlyBase.scatter(x=x[idx], y=y[idx], name="$(selected_plot_traits[1]) vs $t"))
+                end
+            end                
         elseif selected_plot_type == ["boxplot"]
             println("Plotting boxplot")
         else
