@@ -23,6 +23,12 @@ pg_ctl -D $CONDA_PREFIX/pgsql_data -l $CONDA_PREFIX/pgsql_data/logfile.txt start
 ## Open the app in julia
 
 ```shell
+julia --project --load test/deploy.jl
+```
+
+Or manually via:
+
+```shell
 julia --project
 ```
 
