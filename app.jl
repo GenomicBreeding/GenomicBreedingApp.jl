@@ -566,6 +566,7 @@ function uiqueryanalyses()
         Stipple.select(
             :analyses_selected_options,
             options=:analyses_filtered_options,
+            useinput=true, 
             multiple = true,
             clearable = true,
             usechips = true,
@@ -620,6 +621,7 @@ function uisqueryentries()
         Stipple.select(
             :traits_selected_options,
             options=:traits_filtered_options,
+            useinput=true, 
             multiple = true,
             clearable = true,
             usechips = true,
@@ -639,6 +641,7 @@ function uisqueryentries()
                 Stipple.select(
                     :species_selected_options,
                     options=:species_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -656,6 +659,7 @@ function uisqueryentries()
                 Stipple.select(
                     :classifications_selected_options,
                     options=:classifications_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -673,6 +677,7 @@ function uisqueryentries()
                 Stipple.select(
                     :populations_selected_options,
                     options=:populations_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -693,6 +698,7 @@ function uisqueryentries()
                 Stipple.select(
                     :entries_selected_options,
                     options=:entries_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -710,6 +716,7 @@ function uisqueryentries()
                 Stipple.select(
                     :years_selected_options,
                     options=:years_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -727,6 +734,7 @@ function uisqueryentries()
                 Stipple.select(
                     :seasons_selected_options,
                     options=:seasons_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -747,6 +755,7 @@ function uisqueryentries()
                 Stipple.select(
                     :harvests_selected_options,
                     options=:harvests_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -764,6 +773,7 @@ function uisqueryentries()
                 Stipple.select(
                     :sites_selected_options,
                     options=:sites_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -781,6 +791,7 @@ function uisqueryentries()
                 Stipple.select(
                     :replications_selected_options,
                     options=:replications_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -801,6 +812,7 @@ function uisqueryentries()
                 Stipple.select(
                     :blocks_selected_options,
                     options=:blocks_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -818,6 +830,7 @@ function uisqueryentries()
                 Stipple.select(
                     :rows_selected_options,
                     options=:rows_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -835,6 +848,7 @@ function uisqueryentries()
                 Stipple.select(
                     :cols_selected_options,
                     options=:cols_filtered_options,
+                    useinput=true, 
                     multiple = true,
                     clearable = true,
                     usechips = true,
@@ -907,9 +921,9 @@ end
 
 function uiplot()
     [
-        Stipple.select(:selected_table_to_plot, options = :choices_tables_to_plot, label = "Table to plot"),
-        Stipple.select(:selected_plot_type, options = :choices_plot_types, label = "Plot type"),
-        Stipple.select(:selected_plot_traits, options = :choices_plot_traits, label = "Traits", multiple=true, usechips=true),
+        Stipple.select(:selected_table_to_plot, useinput=true, options = :choices_tables_to_plot, label = "Table to plot"),
+        Stipple.select(:selected_plot_type, useinput=true, options = :choices_plot_types, label = "Plot type"),
+        Stipple.select(:selected_plot_traits, useinput=true, options = :choices_plot_traits, label = "Traits", multiple=true, usechips=true),
         btn(
             "Plot",
             @click(:plot_table),
