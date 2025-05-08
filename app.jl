@@ -14,6 +14,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
 @app begin
     @in tab_selected_main = "search_and_download"
     @in tab_selected_queries = "base_tables"
+    @in tab_selected_plot = "histogram"
 
 #####################################################################################################################
 # Base tables
@@ -311,37 +312,37 @@ DotEnv.load!(joinpath(homedir(), ".env"))
     end
 ######################################################################################################################
 # Plots
-    @in selected_table_to_plot = ["analyses"]
-    @out choices_tables_to_plot = ["analyses", "trials/entries"]
 
-    df = [queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true)]
+    # Initial tables: one for each plot type, i.e. histogram, scatter, boxplot
+    df = [
+        queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true),
+        queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true),
+        queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true),
+    ]
 
-    @in selected_plot_type = ["histogram"]
-    @out choices_plot_types = ["histogram", "scatter", "boxplot"]
-
-    @in selected_plot_traits = []
-    @out choices_plot_traits = names(df[1])[13:end]
-
-    plots_vector = []
+    # Histograms
+    @in selected_table_to_plot_hist = ["analyses"]
+    @out choices_tables_to_plot_hist = ["analyses", "trials/entries"]
+    @in selected_plot_traits_hist = []
+    @out choices_plot_traits_hist = names(df[1])[13:end]
+    plots_vector_hist = []
     for t in names(df[1])[13:end]
-        push!(plots_vector, PlotlyBase.histogram(x=df[1][!, t]))
+        push!(plots_vector_hist, PlotlyBase.histogram(x=df[1][!, t]))
     end
-    plots_layout = PlotlyBase.Layout(barmode="overlay")
-
-    @out plotdata = plots_vector
-    @out plotplayout = plots_layout
-
-    @onchange selected_table_to_plot begin
-        selected_plot_traits = []
-        choices_plot_traits = []
-        df[1] = if selected_table_to_plot == ["analyses"]
+    plots_layout_hist = PlotlyBase.Layout(barmode="overlay")
+    @out plotdata_hist = plots_vector_hist
+    @out plotlayout_hist = plots_layout_hist
+    @onchange selected_table_to_plot_hist begin
+        selected_plot_traits_hist = []
+        choices_plot_traits_hist = []
+        df[1] = if selected_table_to_plot_hist == ["analyses"]
             if nrow(table_query_analyses.data) == 0
                 println("No data to plot")
                 return DataFrame()
             else
                 table_query_analyses.data
             end
-        elseif selected_table_to_plot == ["trials/entries"]
+        elseif selected_table_to_plot_hist == ["trials/entries"]
             if nrow(table_query_entries.data) == 0
                 println("No data to plot")
                 return DataFrame()
@@ -352,73 +353,163 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             println("Unknown table selected")
             return DataFrame()
         end
-        choices_plot_traits = if ncol(df[1]) == 0
+        choices_plot_traits_hist = if ncol(df[1]) == 0
             ["missing"]
         else
             @show names(df[1])
             names(df[1])[13:end]
         end
     end
-
-
-
-    @in plot_table = false
-
-    @onbutton plot_table begin
-        (plots_vector, plots_layout) = if selected_plot_type == ["histogram"]
-            println("Plotting histogram")
-            plots_vector = []
-            for t in selected_plot_traits
-                @show t
-                @show names(df[1])
-                try 
-                    df[1][!, t]
-                catch
-                    continue
-                end
-                x = filter(x -> !isnothing(x) && !ismissing(x) && !isinf(x), df[1][!, t])
-                if length(x) < 1
-                    continue
-                end
-                push!(plots_vector, PlotlyBase.histogram(x=x, name=t))
+    @in plot_table_hist = false
+    @onbutton plot_table_hist begin
+        println("Plotting histogram")
+        plots_vector_hist = []
+        for t in selected_plot_traits_hist
+            @show t
+            @show names(df[1])
+            try 
+                df[1][!, t]
+            catch
+                continue
             end
-            plots_layout = PlotlyBase.Layout(barmode="overlay")
-            (plots_vector, plots_layout)
-        elseif selected_plot_type == ["scatter"]
-            println("Plotting scatter plot")
-            plots_vector = []
-            x = df[1][!, selected_plot_traits[1]]
-            for t in selected_plot_traits
-                try 
-                    df[1][!, t]
-                catch
-                    continue
-                end
-                y = df[1][!, t]
-                idx = []
-                for i in 1:length(x)
-                    if !isnothing(x[i]) && !ismissing(x[i]) && !isinf(x[i]) && !isnothing(y[i]) && !ismissing(y[i]) && !isinf(y[i])
-                        push!(idx, i)
-                    end
-                end
-                if length(idx) < 1
-                    continue
-                end
-                # Scatter plot with itself
-                if length(selected_plot_traits) == 1
-                    push!(plots_vector, PlotlyBase.scatter(x=x[idx], y=x[idx], name="$t vs $t"))
-                else
-                    push!(plots_vector, PlotlyBase.scatter(x=x[idx], y=y[idx], name="$(selected_plot_traits[1]) vs $t"))
-                end
-            end                
-        elseif selected_plot_type == ["boxplot"]
-            println("Plotting boxplot")
+            x = filter(x -> !isnothing(x) && !ismissing(x) && !isinf(x), df[1][!, t])
+            if length(x) < 1
+                continue
+            end
+            push!(plots_vector_hist, PlotlyBase.histogram(x=x, name=t))
+        end
+        plots_layout_hist = PlotlyBase.Layout(barmode="overlay")
+        # Update
+        plotdata_hist = plots_vector_hist
+        plotlayout_hist = plots_layout_hist
+    end
+
+    # Scatterplots
+    @in selected_table_to_plot_scat = ["analyses"]
+    @out choices_tables_to_plot_scat = ["analyses", "trials/entries"]
+    @in selected_plot_traits_scat = []
+    @out choices_plot_traits_scat = names(df[2])[13:end]
+    plots_vector_scat = []
+    for t in names(df[2])[13:end]
+        push!(plots_vector_scat, PlotlyBase.histogram(x=df[2][!, t]))
+    end
+    plots_layout_scat = PlotlyBase.Layout(barmode="overlay")
+    @out plotdata_scat = plots_vector_scat
+    @out plotlayout_scat = plots_layout_scat
+    @onchange selected_table_to_plot_scat begin
+        selected_plot_traits_scat = []
+        choices_plot_traits_scat = []
+        df[2] = if selected_table_to_plot_scat == ["analyses"]
+            if nrow(table_query_analyses.data) == 0
+                println("No data to plot")
+                return DataFrame()
+            else
+                table_query_analyses.data
+            end
+        elseif selected_table_to_plot_scat == ["trials/entries"]
+            if nrow(table_query_entries.data) == 0
+                println("No data to plot")
+                return DataFrame()
+            else
+                table_query_entries.data
+            end
         else
-            println("Unknown plot type selected")
+            println("Unknown table selected")
             return DataFrame()
         end
-        plotdata = plots_vector
-        plotplayout = plots_layout
+        choices_plot_traits_scat = if ncol(df[2]) == 0
+            ["missing"]
+        else
+            @show names(df[2])
+            names(df[2])[13:end]
+        end
+    end
+    @in plot_table_scat = false
+    @onbutton plot_table_scat begin
+        println("Plotting scatterplot")
+        plots_vector_scat = []
+        for t in selected_plot_traits_scat
+            @show t
+            @show names(df[2])
+            try 
+                df[2][!, t]
+            catch
+                continue
+            end
+            x = filter(x -> !isnothing(x) && !ismissing(x) && !isinf(x), df[2][!, t])
+            if length(x) < 1
+                continue
+            end
+            push!(plots_vector_scat, PlotlyBase.histogram(x=x, name=t))
+        end
+        plots_layout_scat = PlotlyBase.Layout(barmode="overlay")
+        # Update
+        plotdata_scat = plots_vector_scat
+        plotlayout_scat = plots_layout_scat
+    end
+
+    # Boxplots
+    @in selected_table_to_plot_box = ["analyses"]
+    @out choices_tables_to_plot_box = ["analyses", "trials/entries"]
+    @in selected_plot_traits_box = []
+    @out choices_plot_traits_box = names(df[2])[13:end]
+    plots_vector_box = []
+    for t in names(df[2])[13:end]
+        push!(plots_vector_box, PlotlyBase.histogram(x=df[2][!, t]))
+    end
+    plots_layout_box = PlotlyBase.Layout(barmode="overlay")
+    @out plotdata_box = plots_vector_box
+    @out plotlayout_box = plots_layout_box
+    @onchange selected_table_to_plot_box begin
+        selected_plot_traits_box = []
+        choices_plot_traits_box = []
+        df[2] = if selected_table_to_plot_box == ["analyses"]
+            if nrow(table_query_analyses.data) == 0
+                println("No data to plot")
+                return DataFrame()
+            else
+                table_query_analyses.data
+            end
+        elseif selected_table_to_plot_box == ["trials/entries"]
+            if nrow(table_query_entries.data) == 0
+                println("No data to plot")
+                return DataFrame()
+            else
+                table_query_entries.data
+            end
+        else
+            println("Unknown table selected")
+            return DataFrame()
+        end
+        choices_plot_traits_box = if ncol(df[2]) == 0
+            ["missing"]
+        else
+            @show names(df[2])
+            names(df[2])[13:end]
+        end
+    end
+    @in plot_table_box = false
+    @onbutton plot_table_box begin
+        println("Plotting scatterplot")
+        plots_vector_box = []
+        for t in selected_plot_traits_box
+            @show t
+            @show names(df[2])
+            try 
+                df[2][!, t]
+            catch
+                continue
+            end
+            x = filter(x -> !isnothing(x) && !ismissing(x) && !isinf(x), df[2][!, t])
+            if length(x) < 1
+                continue
+            end
+            push!(plots_vector_box, PlotlyBase.histogram(x=x, name=t))
+        end
+        plots_layout_box = PlotlyBase.Layout(barmode="overlay")
+        # Update
+        plotdata_box = plots_vector_box
+        plotlayout_box = plots_layout_box
     end
 end
 
@@ -919,19 +1010,80 @@ function uisearchanddownload()
     ]
 end
 
-function uiplot()
+function uiplothist()
     [
-        Stipple.select(:selected_table_to_plot, useinput=true, options = :choices_tables_to_plot, label = "Table to plot"),
-        Stipple.select(:selected_plot_type, useinput=true, options = :choices_plot_types, label = "Plot type"),
-        Stipple.select(:selected_plot_traits, useinput=true, options = :choices_plot_traits, label = "Traits", multiple=true, usechips=true),
+        Stipple.select(:selected_table_to_plot_hist, useinput=true, options = :choices_tables_to_plot_hist, label = "Table to plot"),
+        Stipple.select(:selected_plot_traits_hist, useinput=true, options = :choices_plot_traits_hist, label = "Traits", multiple=true, usechips=true),
         btn(
             "Plot",
-            @click(:plot_table),
-            loading = :plot_table,
+            @click(:plot_table_hist),
+            loading = :plot_table_hist,
             color = "green",
         ),
-        # spinner(:hourglass, color = "green", size = "3em", @iif("progress_analyses == true")),
-        StipplePlotly.plot(:plotdata, layout=:plotlayout, class="sync_data")
+        StipplePlotly.plot(:plotdata_hist, layout=:plotlayout_hist, class="sync_data")
+    ]
+end
+
+function uiplotscat()
+    [
+        Stipple.select(:selected_table_to_plot_scat, useinput=true, options = :choices_tables_to_plot_scat, label = "Table to plot"),
+        Stipple.select(:selected_plot_traits_scat, useinput=true, options = :choices_plot_traits_scat, label = "Traits", multiple=true, usechips=true),
+        btn(
+            "Plot",
+            @click(:plot_table_scat),
+            loading = :plot_table_scat,
+            color = "green",
+        ),
+        StipplePlotly.plot(:plotdata_scat, layout=:plotlayout_scat, class="sync_data")
+    ]
+end
+
+function uiplotbox()
+    [
+        Stipple.select(:selected_table_to_plot_box, useinput=true, options = :choices_tables_to_plot_box, label = "Table to plot"),
+        Stipple.select(:selected_plot_traits_box, useinput=true, options = :choices_plot_traits_box, label = "Traits", multiple=true, usechips=true),
+        btn(
+            "Plot",
+            @click(:plot_table_box),
+            loading = :plot_table_box,
+            color = "green",
+        ),
+        StipplePlotly.plot(:plotdata_box, layout=:plotlayout_box, class="sync_data")
+    ]
+end
+
+function uiplot()
+    [
+        tabgroup(
+            :tab_selected_plot,
+            align = "justify",
+            inlinelabel = true,
+            class = "bg-blue text-white shadow-2 size=20",
+            activecolorbg = "red",
+            [
+                tab(
+                    name = "histogram",
+                    label = "Histogram",
+                ),
+                tab(name = "scatterplot",
+                    label = "Scatterplot"
+                ),
+                tab(name = "boxplot",
+                    label = "Violin/boxplot"
+                ),
+            ],
+        ),
+        tabpanels(
+            :tab_selected_plot,
+            animated = true,
+            var"transition-prev" = "scale",
+            var"transition-next" = "scale",
+            [
+                tabpanel(name = "histogram", uiplothist()),
+                tabpanel(name = "scatterplot", uiplotscat()),
+                tabpanel(name = "boxplot", uiplotbox()),
+            ],
+        ),
     ]
 end
 
@@ -965,6 +1117,7 @@ function ui()
             var"transition-next" = "scale",
             [
                 tabpanel(name = "search_and_download", uisearchanddownload()),
+                # tabpanel(name = "analyse_and_plot", [p("Plot")]),
                 tabpanel(name = "analyse_and_plot", uiplot()),
                 tabpanel(name = "upload_and_validate", [p("Upload/Validate Tab")]),
             ],
