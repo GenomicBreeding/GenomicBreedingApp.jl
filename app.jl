@@ -1,7 +1,7 @@
 module GenomicBreedingApp
 
 using StatsBase, DataFrames, Tables, CSV, StippleDownloads
-using PlotlyBase
+using PlotlyBase, ColorSchemes
 using GenieFramework
 using GenomicBreedingCore, GenomicBreedingIO
 # Make sure the PostgreSQL database is running (see https://github.com/GenomicBreeding/GenomicBreedingDB.jl)
@@ -313,18 +313,24 @@ DotEnv.load!(joinpath(homedir(), ".env"))
 ######################################################################################################################
 # Plots
 
-    # Initial tables: one for each plot type, i.e. histogram, scatter, boxplot
+    # Initialize three DataFrames (one for each plot type) with some initial data
     df = [
         queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true),
-        queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true),
+        queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true), 
         queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true),
     ]
 
-    # Histograms
-    @in selected_table_to_plot_hist = ["analyses"]
-    @out choices_tables_to_plot_hist = ["analyses", "trials/entries"]
-    @in selected_plot_traits_hist = []
-    @out choices_plot_traits_hist = names(df[1])[13:end]
+    #####################################################
+    # Histogram plotting functionality
+    #####################################################
+    
+    # Define reactive inputs for histogram plot
+    @in selected_table_to_plot_hist = ["analyses"] # Which table to plot from
+    @out choices_tables_to_plot_hist = ["analyses", "trials/entries"] # Available table choices
+    @in selected_plot_traits_hist = [] # Which traits to plot histograms for
+    @out choices_plot_traits_hist = names(df[1])[13:end] # Available trait choices (columns 13+ contain trait data)
+
+    # Create initial histogram plots for all traits
     plots_vector_hist = []
     for t in names(df[1])[13:end]
         push!(plots_vector_hist, PlotlyBase.histogram(x=df[1][!, t]))
@@ -332,9 +338,12 @@ DotEnv.load!(joinpath(homedir(), ".env"))
     plots_layout_hist = PlotlyBase.Layout(barmode="overlay")
     @out plotdata_hist = plots_vector_hist
     @out plotlayout_hist = plots_layout_hist
+
+    # When user changes selected table, update available trait choices
     @onchange selected_table_to_plot_hist begin
         selected_plot_traits_hist = []
         choices_plot_traits_hist = []
+        # Get data from selected table
         df[1] = if selected_table_to_plot_hist == ["analyses"]
             if nrow(table_query_analyses.data) == 0
                 println("No data to plot")
@@ -353,6 +362,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             println("Unknown table selected")
             return DataFrame()
         end
+        # Update trait choices
         choices_plot_traits_hist = if ncol(df[1]) == 0
             ["missing"]
         else
@@ -360,6 +370,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             names(df[1])[13:end]
         end
     end
+
+    # When plot button clicked, create histograms for selected traits
     @in plot_table_hist = false
     @onbutton plot_table_hist begin
         println("Plotting histogram")
@@ -372,6 +384,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             catch
                 continue
             end
+            # Filter out missing/invalid values
             x = filter(x -> !isnothing(x) && !ismissing(x) && !isinf(x), df[1][!, t])
             if length(x) < 1
                 continue
@@ -379,33 +392,51 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             push!(plots_vector_hist, PlotlyBase.histogram(x=x, name=t))
         end
         plots_layout_hist = PlotlyBase.Layout(barmode="overlay")
-        # Update
+        # Update plot
         plotdata_hist = plots_vector_hist
         plotlayout_hist = plots_layout_hist
     end
 
-    # Scatterplots
+    #####################################################
+    # Scatter plot functionality 
+    #####################################################
+
+    # Define reactive inputs for scatter plot
     @in selected_table_to_plot_scat = ["analyses"]
     @out choices_tables_to_plot_scat = ["analyses", "trials/entries"]
-    @in selected_plot_traits_scat_x = []
+    @in selected_plot_traits_scat_x = [] # X-axis trait
     @out choices_plot_traits_scat_x = names(df[2])[13:end]
-    @in selected_plot_traits_scat_y = []
+    @in selected_plot_traits_scat_y = [] # Y-axis trait  
     @out choices_plot_traits_scat_y = names(df[2])[13:end]
+    @in selected_plot_groupings_scat = ["name"]
+    @out choices_plot_groupings_scat = names(df[2])
+
+    @in selected_plot_colour_scheme_scat = :seaborn_colorblind
+    @out choices_plot_colour_scheme_scat = [:seaborn_colorblind, :tol_bright, :tol_light, :tol_muted, :okabe_ito, :mk_15]
+    @in n_bins_plot_scat = 5
+
+
+    # Create initial scatter plot
     plots_vector_scat = []
     x = df[2][:, 13]
     y = df[2][:, end]
+    # Filter valid points
     idx = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isinf.(x) .&& .!isinf.(y))
     x = x[idx]
     y = y[idx]
     plots_vector_scat = [PlotlyBase.scatter(x=x, y=y, mode="markers")]
-    plots_layout_scat = PlotlyBase.Layout(barmode="overlay")
+    plots_layout_scat = PlotlyBase.Layout()
     @out plotdata_scat = plots_vector_scat
     @out plotlayout_scat = plots_layout_scat
+
+    # When table selection changes, update trait choices
     @onchange selected_table_to_plot_scat begin
         selected_plot_traits_scat_x = []
         choices_plot_traits_scat_x = []
         selected_plot_traits_scat_y = []
         choices_plot_traits_scat_y = []
+        selected_plot_groupings_scat = []
+        choices_plot_groupings_scat = []
         df[2] = if selected_table_to_plot_scat == ["analyses"]
             if nrow(table_query_analyses.data) == 0
                 println("No data to plot")
@@ -434,13 +465,68 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         else
             names(df[2])[13:end]
         end
+        choices_plot_groupings_scat = names(df[2])
     end
+
+    # When plot button clicked, create scatter plot
     @in plot_table_scat = false
     @onbutton plot_table_scat begin
         println("Plotting scatterplot")
         x = df[2][!, selected_plot_traits_scat_x[1]]
         y = df[2][!, selected_plot_traits_scat_y[1]]
         idx = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isinf.(x) .&& .!isinf.(y))
+        
+        # Set up color scheme for points
+        z = df[2][!, selected_plot_groupings_scat[1]]
+        z, idx = if isa(z[1], String)
+            z[ismissing.(z)] .= "missing"
+            (z, idx)
+        else
+            idx_with_z = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!ismissing.(z) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isnan.(z) .&& .!isinf.(x) .&& .!isinf.(y) .&& .!isinf.(z))
+            if length(idx_with_z) > 0
+                (z, idx_with_z)
+            else
+                z .= "missing"
+                (z, idx)
+            end
+        end
+        
+        # Create color bins
+        unique_z = if isa(z[1], String) 
+            unique(z)
+        else
+            n = if n_bins_plot_scat > length(z)
+                length(z)
+            else
+                n_bins_plot_scat
+            end
+            filtered_z = filter(x -> !ismissing(x) && !isnan(x) && !isinf(x), z)
+            unique_z = vcat(0, percentile(filtered_z, 100 .* collect(1/n:1/n:1)))
+        end
+        
+        # Assign colors to bins
+        colours_per_unique_z = try
+            colorschemes[selected_plot_colour_scheme_scat][1:length(unique_z)]
+        catch
+            repeat(
+                colorschemes[selected_plot_colour_scheme_scat][1:end], 
+                outer=Int(ceil(length(unique_z)/length(colorschemes[selected_plot_colour_scheme_scat])))
+            )[1:length(unique_z)]
+        end
+        
+        # Map colours to points
+        colours = if isa(z[idx[1]], String)
+            [colours_per_unique_z[unique_z .== zi][1] for zi in z]
+        else
+            [
+                ismissing(zi) || isnan(zi) || isinf(zi) ? colours_per_unique_z[1] : colours_per_unique_z[1:(end-1)][
+                    (unique_z[1:(end-1)] .< zi) .&&
+                    (unique_z[2:end] .>= zi)
+                ][1] for zi in z
+            ]
+        end
+
+        # Create hover text for each point
         hovertext = [
             join(
                 filter(x -> !isnothing(x) && split(x, ": ")[end] != "missing", [
@@ -460,36 +546,83 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                     string(selected_plot_traits_scat_x[1], ": ", round(x[i], digits=4)),
                     string(selected_plot_traits_scat_y[1], ": ", round(y[i], digits=4))
                 ]), "<br>"
-            ) for i in idx
+            ) for i in 1:length(x)
         ]
-        plots_vector_scat = [PlotlyBase.scatter(
-            x=x[idx], 
-            y=y[idx], 
-            mode="markers", 
-            hoverinfo="text", 
-            hovertext=hovertext,
-        )]
-        plots_layout_scat = PlotlyBase.Layout(barmode="overlay")
-        # Update
+
+        # Create scatter plot for each group
+        plots_vector_scat = []
+        for (j, g) in enumerate(unique_z)
+            group_indices = if isa(z[idx[1]], String)
+                findall(i -> z[i] == g, idx)
+            else
+                if j == 1
+                    continue
+                end
+                findall(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+            end
+            push!(plots_vector_scat, scatter(
+                x=x[group_indices], 
+                y=y[group_indices], 
+                mode="markers", 
+                hoverinfo="text", 
+                hovertext=hovertext[group_indices],
+                marker=attr(color=colours[group_indices]), 
+                name=g
+            ))
+        end
+
+        # Set plot layout
+        plots_layout_scat = PlotlyBase.Layout(
+            title=string("Scatterplot of ", selected_plot_traits_scat_x[1], " vs ", selected_plot_traits_scat_y[1]),
+            xaxis_title=selected_plot_traits_scat_x[1],
+            yaxis_title=selected_plot_traits_scat_y[1],
+            showlegend=true,
+            legend=attr(title=attr(text=selected_plot_groupings_scat[1])),
+        )
+        # Update plot
         plotdata_scat = plots_vector_scat
         plotlayout_scat = plots_layout_scat
     end
 
-    # Boxplots
+    #####################################################
+    # Box plot functionality
+    #####################################################
+
+    # Define reactive inputs for box plot
     @in selected_table_to_plot_box = ["analyses"]
     @out choices_tables_to_plot_box = ["analyses", "trials/entries"]
+    
     @in selected_plot_traits_box = []
     @out choices_plot_traits_box = names(df[2])[13:end]
+
+    @in selected_plot_grouping_1_box = []
+    @out choices_plot_grouping_1_box = names(df[2])[13:end]
+    @in selected_plot_grouping_2_box = []
+    @out choices_plot_grouping_2_box = names(df[2])[13:end]
+
+
+
+    # Create initial box plots
     plots_vector_box = []
-    for t in names(df[2])[13:end]
-        push!(plots_vector_box, PlotlyBase.histogram(x=df[2][!, t]))
-    end
-    plots_layout_box = PlotlyBase.Layout(barmode="overlay")
+    x = df[2][:, "name"]
+    y = df[2][:, end]
+    # Filter valid points
+    idx = findall(.!ismissing.(y) .&& .!isnan.(y) .&& .!isinf.(y))
+    x = x[idx]
+    y = y[idx]
+    plots_vector_box = [PlotlyBase.box(x=x, y=y)]
+    plots_layout_box = PlotlyBase.Layout()
     @out plotdata_box = plots_vector_box
     @out plotlayout_box = plots_layout_box
+
+    # When table selection changes, update trait choices
     @onchange selected_table_to_plot_box begin
         selected_plot_traits_box = []
         choices_plot_traits_box = []
+        selected_plot_grouping_1_box = []
+        choices_plot_grouping_1_box = []
+        selected_plot_grouping_2_box = []
+        choices_plot_grouping_2_box = []
         df[2] = if selected_table_to_plot_box == ["analyses"]
             if nrow(table_query_analyses.data) == 0
                 println("No data to plot")
@@ -514,27 +647,27 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             @show names(df[2])
             names(df[2])[13:end]
         end
+        choices_plot_grouping_1_box = names(df[2])
+        choices_plot_grouping_2_box = names(df[2])
     end
+
+    # When plot button clicked, create box plots for selected traits
     @in plot_table_box = false
     @onbutton plot_table_box begin
         println("Plotting scatterplot")
         plots_vector_box = []
-        for t in selected_plot_traits_box
-            @show t
-            @show names(df[2])
-            try 
-                df[2][!, t]
-            catch
-                continue
-            end
-            x = filter(x -> !isnothing(x) && !ismissing(x) && !isinf(x), df[2][!, t])
-            if length(x) < 1
-                continue
-            end
-            push!(plots_vector_box, PlotlyBase.histogram(x=x, name=t))
-        end
-        plots_layout_box = PlotlyBase.Layout(barmode="overlay")
-        # Update
+        x = df[2][:, selected_plot_grouping_1_box[1]]
+        y = df[2][:, selected_plot_traits_box[1]]
+
+        # TODO: Secondary grouping via: `selected_plot_grouping_2_box[1]`
+
+        # Filter valid points
+        idx = findall(.!ismissing.(y) .&& .!isnan.(y) .&& .!isinf.(y))
+        x = x[idx]
+        y = y[idx]
+        plots_vector_box = [PlotlyBase.box(x=x, y=y)]
+        plots_layout_box = PlotlyBase.Layout()
+        # Update plot
         plotdata_box = plots_vector_box
         plotlayout_box = plots_layout_box
     end
@@ -1051,11 +1184,29 @@ function uiplothist()
     ]
 end
 
+selected_plot_colour_scheme_scat
+choices_plot_colour_scheme_scat
+n_bins_plot_scat
+
 function uiplotscat()
     [
-        Stipple.select(:selected_table_to_plot_scat, useinput=true, options = :choices_tables_to_plot_scat, label = "Table to plot"),
-        Stipple.select(:selected_plot_traits_scat_x, useinput=true, options = :choices_plot_traits_scat_x, label = "Trait 1", multiple=false, usechips=false),
-        Stipple.select(:selected_plot_traits_scat_y, useinput=true, options = :choices_plot_traits_scat_y, label = "Trait 2", multiple=false, usechips=false),
+        row([
+            column(size=3, [
+                Stipple.select(:selected_table_to_plot_scat, useinput=true, options = :choices_tables_to_plot_scat, label = "Table to plot"),
+            ]),
+            column(size=3, [
+                Stipple.select(:selected_plot_traits_scat_x, useinput=true, options = :choices_plot_traits_scat_x, label = "Trait 1", multiple=false, usechips=false),
+            ]),
+            column(size=3, [
+                Stipple.select(:selected_plot_traits_scat_y, useinput=true, options = :choices_plot_traits_scat_y, label = "Trait 2", multiple=false, usechips=false),
+            ]),
+            column(size=3, [
+                Stipple.select(:selected_plot_groupings_scat, useinput=true, options = :choices_plot_groupings_scat, label = "Grouping", multiple=false, usechips=false),
+            ]),
+            column(size=3, [
+                Stipple.select(:selected_plot_colour_scheme_scat, useinput=true, options = :choices_plot_colour_scheme_scat, label = "Colour Scheme", multiple=false, usechips=false),
+            ]),
+        ]),
         btn(
             "Plot",
             @click(:plot_table_scat),
@@ -1068,8 +1219,20 @@ end
 
 function uiplotbox()
     [
-        Stipple.select(:selected_table_to_plot_box, useinput=true, options = :choices_tables_to_plot_box, label = "Table to plot"),
-        Stipple.select(:selected_plot_traits_box, useinput=true, options = :choices_plot_traits_box, label = "Traits", multiple=true, usechips=true),
+        row([
+            column(size=3, [
+                Stipple.select(:selected_table_to_plot_box, useinput=true, options = :choices_tables_to_plot_box, label = "Table to plot"),
+                ]),
+            column(size=3, [
+                Stipple.select(:selected_plot_traits_box, useinput=true, options = :choices_plot_traits_box, label = "Traits", multiple=false, usechips=false),
+            ]),
+            column(size=3, [
+                Stipple.select(:selected_plot_grouping_1_box, useinput=true, options = :choices_plot_grouping_1_box, label = "Traits", multiple=false, usechips=false),
+            ]),
+            column(size=3, [
+                Stipple.select(:selected_plot_grouping_2_box, useinput=true, options = :choices_plot_grouping_2_box, label = "Traits", multiple=false, usechips=false),
+            ]),
+        ]),
         btn(
             "Plot",
             @click(:plot_table_box),
