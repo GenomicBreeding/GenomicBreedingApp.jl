@@ -387,18 +387,25 @@ DotEnv.load!(joinpath(homedir(), ".env"))
     # Scatterplots
     @in selected_table_to_plot_scat = ["analyses"]
     @out choices_tables_to_plot_scat = ["analyses", "trials/entries"]
-    @in selected_plot_traits_scat = []
-    @out choices_plot_traits_scat = names(df[2])[13:end]
+    @in selected_plot_traits_scat_x = []
+    @out choices_plot_traits_scat_x = names(df[2])[13:end]
+    @in selected_plot_traits_scat_y = []
+    @out choices_plot_traits_scat_y = names(df[2])[13:end]
     plots_vector_scat = []
-    for t in names(df[2])[13:end]
-        push!(plots_vector_scat, PlotlyBase.histogram(x=df[2][!, t]))
-    end
+    x = df[2][:, 13]
+    y = df[2][:, end]
+    idx = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isinf.(x) .&& .!isinf.(y))
+    x = x[idx]
+    y = y[idx]
+    plots_vector_scat = [PlotlyBase.scatter(x=x, y=y, mode="markers")]
     plots_layout_scat = PlotlyBase.Layout(barmode="overlay")
     @out plotdata_scat = plots_vector_scat
     @out plotlayout_scat = plots_layout_scat
     @onchange selected_table_to_plot_scat begin
-        selected_plot_traits_scat = []
-        choices_plot_traits_scat = []
+        selected_plot_traits_scat_x = []
+        choices_plot_traits_scat_x = []
+        selected_plot_traits_scat_y = []
+        choices_plot_traits_scat_y = []
         df[2] = if selected_table_to_plot_scat == ["analyses"]
             if nrow(table_query_analyses.data) == 0
                 println("No data to plot")
@@ -417,31 +424,51 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             println("Unknown table selected")
             return DataFrame()
         end
-        choices_plot_traits_scat = if ncol(df[2]) == 0
+        choices_plot_traits_scat_x = if ncol(df[2]) == 0
             ["missing"]
         else
-            @show names(df[2])
+            names(df[2])[13:end]
+        end
+        choices_plot_traits_scat_y = if ncol(df[2]) == 0
+            ["missing"]
+        else
             names(df[2])[13:end]
         end
     end
     @in plot_table_scat = false
     @onbutton plot_table_scat begin
         println("Plotting scatterplot")
-        plots_vector_scat = []
-        for t in selected_plot_traits_scat
-            @show t
-            @show names(df[2])
-            try 
-                df[2][!, t]
-            catch
-                continue
-            end
-            x = filter(x -> !isnothing(x) && !ismissing(x) && !isinf(x), df[2][!, t])
-            if length(x) < 1
-                continue
-            end
-            push!(plots_vector_scat, PlotlyBase.histogram(x=x, name=t))
-        end
+        x = df[2][!, selected_plot_traits_scat_x[1]]
+        y = df[2][!, selected_plot_traits_scat_y[1]]
+        idx = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isinf.(x) .&& .!isinf.(y))
+        hovertext = [
+            join(
+                filter(x -> !isnothing(x) && split(x, ": ")[end] != "missing", [
+                    # Trials and phenomes
+                    "name" ∈ names(df[2]) ? string("name: ", df[2].name[i]) : nothing,
+                    "population" ∈ names(df[2]) ? string("population: ", df[2].population[i]) : nothing,
+                    "year" ∈ names(df[2]) ? string("year: ", df[2].year[i]) : nothing,
+                    "season" ∈ names(df[2]) ? string("season: ", df[2].season[i]) : nothing,
+                    "site" ∈ names(df[2]) ? string("site: ", df[2].site[i]) : nothing,
+                    "harvest" ∈ names(df[2]) ? string("harvest: ", df[2].harvest[i]) : nothing,
+                    "replication" ∈ names(df[2]) ? string("replication: ", df[2].replication[i]) : nothing,
+                    "block" ∈ names(df[2]) ? string("block: ", df[2].block[i]) : nothing,
+                    "row" ∈ names(df[2]) ? string("row: ", df[2].row[i]) : nothing,
+                    "column" ∈ names(df[2]) ? string("column: ", df[2].column[i]) : nothing,
+                    # CVs
+                    "fold" ∈ names(df[2]) ? string("fold: ", df[2].fold[i]) : nothing,
+                    string(selected_plot_traits_scat_x[1], ": ", round(x[i], digits=4)),
+                    string(selected_plot_traits_scat_y[1], ": ", round(y[i], digits=4))
+                ]), "<br>"
+            ) for i in idx
+        ]
+        plots_vector_scat = [PlotlyBase.scatter(
+            x=x[idx], 
+            y=y[idx], 
+            mode="markers", 
+            hoverinfo="text", 
+            hovertext=hovertext,
+        )]
         plots_layout_scat = PlotlyBase.Layout(barmode="overlay")
         # Update
         plotdata_scat = plots_vector_scat
@@ -1027,7 +1054,8 @@ end
 function uiplotscat()
     [
         Stipple.select(:selected_table_to_plot_scat, useinput=true, options = :choices_tables_to_plot_scat, label = "Table to plot"),
-        Stipple.select(:selected_plot_traits_scat, useinput=true, options = :choices_plot_traits_scat, label = "Traits", multiple=true, usechips=true),
+        Stipple.select(:selected_plot_traits_scat_x, useinput=true, options = :choices_plot_traits_scat_x, label = "Trait 1", multiple=false, usechips=false),
+        Stipple.select(:selected_plot_traits_scat_y, useinput=true, options = :choices_plot_traits_scat_y, label = "Trait 2", multiple=false, usechips=false),
         btn(
             "Plot",
             @click(:plot_table_scat),
@@ -1117,7 +1145,6 @@ function ui()
             var"transition-next" = "scale",
             [
                 tabpanel(name = "search_and_download", uisearchanddownload()),
-                # tabpanel(name = "analyse_and_plot", [p("Plot")]),
                 tabpanel(name = "analyse_and_plot", uiplot()),
                 tabpanel(name = "upload_and_validate", [p("Upload/Validate Tab")]),
             ],
