@@ -371,9 +371,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         end
     end
 
-    # When plot button clicked, create histograms for selected traits
-    @in plot_table_hist = false
-    @onbutton plot_table_hist begin
+    # TODO: (1/3) parameterise, add tests and docs + move to a separate file
+    function reactivehist(df, selected_plot_traits_hist)
         println("Plotting histogram")
         plots_vector_hist = []
         for t in selected_plot_traits_hist
@@ -393,8 +392,18 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         end
         plots_layout_hist = PlotlyBase.Layout(barmode="overlay")
         # Update plot
-        plotdata_hist = plots_vector_hist
-        plotlayout_hist = plots_layout_hist
+        Dict(
+            "plotdata_hist" => plots_vector_hist,
+            "plotlayout_hist" => plots_layout_hist,
+        )
+    end
+
+    # When plot button clicked, create histograms for selected traits
+    @in plot_table_hist = false
+    @onbutton plot_table_hist begin
+        p = reactivehist(df, selected_plot_traits_hist)
+        plotdata_hist = p["plotdata_hist"]
+        plotlayout_hist = p["plotlayout_hist"]
     end
 
     #####################################################
@@ -468,43 +477,56 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         choices_plot_groupings_scat = names(df[2])
     end
 
-    # When plot button clicked, create scatter plot
-    @in plot_table_scat = false
-    @onbutton plot_table_scat begin
+    # TODO: (2/3) parameterise, add tests and docs + move to a separate file
+    function reactivescatter(df, selected_plot_traits_scat_x, selected_plot_traits_scat_y, selected_plot_groupings_scat, n_bins_plot_scat, selected_plot_colour_scheme_scat)
         println("Plotting scatterplot")
         x = df[2][!, selected_plot_traits_scat_x[1]]
         y = df[2][!, selected_plot_traits_scat_y[1]]
-        idx = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isinf.(x) .&& .!isinf.(y))
-        
-        # Set up color scheme for points
         z = df[2][!, selected_plot_groupings_scat[1]]
-        z, idx = if isa(z[1], String)
-            z[ismissing.(z)] .= "missing"
-            (z, idx)
-        else
-            idx_with_z = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!ismissing.(z) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isnan.(z) .&& .!isinf.(x) .&& .!isinf.(y) .&& .!isinf.(z))
-            if length(idx_with_z) > 0
-                (z, idx_with_z)
+        # Set up color scheme for points
+        z = begin
+            z_new = repeat(["missing"], length(z))
+            idx = findall(.!ismissing.(z))
+            if (length(idx) > 0) && !isa(z[idx[1]], String) 
+                idx = findall(.!ismissing.(z) .&& .!isnan.(z) .&& .!isinf.(z))
+                n = if n_bins_plot_scat > length(z)
+                    length(z)
+                else
+                    n_bins_plot_scat
+                end
+                unique_z = percentile(
+                    filter(z -> !ismissing(z) && !isnan(z) && !isinf(z), z), 
+                    100 .* collect(0:1/n:1)
+                )
+                m1 = length(split(string(maximum(round.(unique_z))), ".")[1])
+                m2 = 4
+                for (j, z_level) in enumerate(unique_z)
+                    if j == 1
+                        continue
+                    end
+                    idx_sub = if j == 2
+                        # include the minimum
+                        filter(i -> (z[i] >= unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+                    else
+                        filter(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+                    end
+                    ini = begin
+                        ini = string((round(unique_z[j-1], digits=4)))
+                        join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
+                    end
+                    fin = begin
+                        fin = string((round(unique_z[j], digits=4)))
+                        join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
+                    end
+                    z_new[idx_sub] .= string(ini, " - ", fin)
+                end
             else
-                z .= "missing"
-                (z, idx)
+                z_new[idx] = z[idx]
             end
+            z_new
         end
-        
-        # Create color bins
-        unique_z = if isa(z[1], String) 
-            unique(z)
-        else
-            n = if n_bins_plot_scat > length(z)
-                length(z)
-            else
-                n_bins_plot_scat
-            end
-            filtered_z = filter(x -> !ismissing(x) && !isnan(x) && !isinf(x), z)
-            unique_z = vcat(0, percentile(filtered_z, 100 .* collect(1/n:1/n:1)))
-        end
-        
-        # Assign colors to bins
+        # Map colours to points
+        unique_z = sort(unique(z))
         colours_per_unique_z = try
             colorschemes[selected_plot_colour_scheme_scat][1:length(unique_z)]
         catch
@@ -513,19 +535,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 outer=Int(ceil(length(unique_z)/length(colorschemes[selected_plot_colour_scheme_scat])))
             )[1:length(unique_z)]
         end
-        
-        # Map colours to points
-        colours = if isa(z[idx[1]], String)
-            [colours_per_unique_z[unique_z .== zi][1] for zi in z]
-        else
-            [
-                ismissing(zi) || isnan(zi) || isinf(zi) ? colours_per_unique_z[1] : colours_per_unique_z[1:(end-1)][
-                    (unique_z[1:(end-1)] .< zi) .&&
-                    (unique_z[2:end] .>= zi)
-                ][1] for zi in z
-            ]
-        end
-
+        # colours = [colours_per_unique_z[unique_z .== zi][1] for zi in z]
         # Create hover text for each point
         hovertext = [
             join(
@@ -551,24 +561,20 @@ DotEnv.load!(joinpath(homedir(), ".env"))
 
         # Create scatter plot for each group
         plots_vector_scat = []
+        @show unique_z
         for (j, g) in enumerate(unique_z)
-            group_indices = if isa(z[idx[1]], String)
-                findall(i -> z[i] == g, idx)
-            else
-                if j == 1
-                    continue
-                end
-                findall(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
-            end
-            push!(plots_vector_scat, scatter(
-                x=x[group_indices], 
-                y=y[group_indices], 
-                mode="markers", 
-                hoverinfo="text", 
-                hovertext=hovertext[group_indices],
-                marker=attr(color=colours[group_indices]), 
-                name=g
-            ))
+            group_indices = filter(i -> z[i] == g, idx)
+            push!(plots_vector_scat, 
+                scatter(
+                    x=x[group_indices], 
+                    y=y[group_indices], 
+                    mode="markers", 
+                    hoverinfo="text", 
+                    hovertext=hovertext[group_indices],
+                    # marker=attr(color=colours[group_indices]), 
+                    name=g
+                )
+            )
         end
 
         # Set plot layout
@@ -578,10 +584,22 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             yaxis_title=selected_plot_traits_scat_y[1],
             showlegend=true,
             legend=attr(title=attr(text=selected_plot_groupings_scat[1])),
+            colorway=colours_per_unique_z,
         )
         # Update plot
-        plotdata_scat = plots_vector_scat
-        plotlayout_scat = plots_layout_scat
+        Dict(
+            "plotdata_scat" => plots_vector_scat,
+            "plotlayout_scat" => plots_layout_scat,
+        )
+    end
+
+
+    # When plot button clicked, create scatter plot
+    @in plot_table_scat = false
+    @onbutton plot_table_scat begin
+        p = reactivescatter(df, selected_plot_traits_scat_x, selected_plot_traits_scat_y, selected_plot_groupings_scat, n_bins_plot_scat, selected_plot_colour_scheme_scat)
+        plotdata_scat = p["plotdata_scat"]
+        plotlayout_scat = p["plotlayout_scat"]
     end
 
     #####################################################
@@ -599,6 +617,11 @@ DotEnv.load!(joinpath(homedir(), ".env"))
     @out choices_plot_grouping_1_box = names(df[2])[13:end]
     @in selected_plot_grouping_2_box = []
     @out choices_plot_grouping_2_box = names(df[2])[13:end]
+
+    @in n_bins_plot_grouping_1_box = 5
+    @in n_bins_plot_grouping_2_box = 5
+    @in selected_plot_colour_scheme_box = :seaborn_colorblind
+    @out choices_plot_colour_scheme_box = [:seaborn_colorblind, :tol_bright, :tol_light, :tol_muted, :okabe_ito, :mk_15]
 
 
 
@@ -651,25 +674,167 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         choices_plot_grouping_2_box = names(df[2])
     end
 
-    # When plot button clicked, create box plots for selected traits
-    @in plot_table_box = false
-    @onbutton plot_table_box begin
-        println("Plotting scatterplot")
+    # TODO: (3/3) parameterise, add tests and docs + move to a separate file
+    function reactivebox(
+        df, 
+        selected_plot_traits_box,
+        selected_plot_grouping_1_box,
+        selected_plot_grouping_2_box,
+        selected_plot_colour_scheme_box,
+        n_bins_plot_grouping_1_box,
+        n_bins_plot_grouping_2_box,
+    )
+        println("Plotting boxplot")
         plots_vector_box = []
         x = df[2][:, selected_plot_grouping_1_box[1]]
         y = df[2][:, selected_plot_traits_box[1]]
-
-        # TODO: Secondary grouping via: `selected_plot_grouping_2_box[1]`
-
-        # Filter valid points
+        z = if selected_plot_grouping_1_box == selected_plot_grouping_2_box
+            repeat(["missing"], length(y))
+        elseif length(selected_plot_grouping_2_box) > 0
+            df[2][:, selected_plot_grouping_2_box[1]]
+        else
+            repeat(["missing"], length(y))
+        end
+        # Create x bins
+        x = begin
+            x_new = repeat(["missing"], length(x))
+            idx = findall(.!ismissing.(x))
+            if (length(idx) > 0) && !isa(x[idx[1]], String) 
+                idx = findall(.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x))
+                n = if n_bins_plot_grouping_1_box > length(x)
+                    length(x)
+                else
+                    n_bins_plot_grouping_1_box
+                end
+                unique_x = percentile(
+                    filter(x -> !ismissing(x) && !isnan(x) && !isinf(x), x), 
+                    100 .* collect(0:1/n:1)
+                )
+                m1 = length(split(string(maximum(round.(unique_x))), ".")[1])
+                m2 = 4
+                for (j, x_level) in enumerate(unique_x)
+                    if j == 1
+                        continue
+                    end
+                    idx_sub = if j == 2
+                        # include the minimum
+                        filter(i -> (x[i] >= unique_x[j-1]) && (x[i] <= unique_x[j]), idx)
+                    else
+                        filter(i -> (x[i] > unique_x[j-1]) && (x[i] <= unique_x[j]), idx)
+                    end
+                    ini = begin
+                        ini = string((round(unique_x[j-1], digits=4)))
+                        join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
+                    end
+                    fin = begin
+                        fin = string((round(unique_x[j], digits=4)))
+                        join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
+                    end
+                    x_new[idx_sub] .= string(ini, " - ", fin)
+                end
+            else
+                x_new[idx] = x[idx]
+            end
+            x_new
+        end
+        # Create z bins
+        z = begin
+            z_new = repeat(["missing"], length(z))
+            idx = findall(.!ismissing.(z))
+            if (length(idx) > 0) && !isa(z[idx[1]], String) 
+                idx = findall(.!ismissing.(z) .&& .!isnan.(z) .&& .!isinf.(z))
+                n = if n_bins_plot_grouping_2_box > length(z)
+                    length(z)
+                else
+                    n_bins_plot_grouping_2_box
+                end
+                unique_z = percentile(
+                    filter(z -> !ismissing(z) && !isnan(z) && !isinf(z), z), 
+                    100 .* collect(0:1/n:1)
+                )
+                m1 = length(split(string(maximum(round.(unique_z))), ".")[1])
+                m2 = 4
+                for (j, z_level) in enumerate(unique_z)
+                    if j == 1
+                        continue
+                    end
+                    idx_sub = if j == 2
+                        # include the minimum
+                        filter(i -> (z[i] >= unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+                    else
+                        filter(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+                    end
+                    ini = begin
+                        ini = string((round(unique_z[j-1], digits=4)))
+                        join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
+                    end
+                    fin = begin
+                        fin = string((round(unique_z[j], digits=4)))
+                        join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
+                    end
+                    z_new[idx_sub] .= string(ini, " - ", fin)
+                end
+            else
+                z_new[idx] = z[idx]
+            end
+            z_new
+        end
+        unique_z = sort(unique(z))
+        colours_per_unique_z = try
+            colorschemes[selected_plot_colour_scheme_box][1:length(unique_z)]
+        catch
+            repeat(
+                colorschemes[selected_plot_colour_scheme_box][1:end], 
+                outer=Int(ceil(length(unique_z)/length(colorschemes[selected_plot_colour_scheme_box])))
+            )[1:length(unique_z)]
+        end
         idx = findall(.!ismissing.(y) .&& .!isnan.(y) .&& .!isinf.(y))
-        x = x[idx]
-        y = y[idx]
-        plots_vector_box = [PlotlyBase.box(x=x, y=y)]
-        plots_layout_box = PlotlyBase.Layout()
+        plots_vector_box = if length(idx) == 0
+            []
+        else
+            plots_vector_box = []
+            for z_level in sort(unique(z))
+                # Filter valid points
+                idx_sub = filter(j -> z[j] == z_level, idx)
+                push!(plots_vector_box, PlotlyBase.box(x=x[idx_sub], y=y[idx_sub], name=z_level, boxmean="sd"))
+            end
+            plots_vector_box
+        end
+        plots_layout_box = PlotlyBase.Layout(
+            title=string("Boxplot of ", selected_plot_traits_box[1], "<br>    per ", selected_plot_grouping_1_box[1], " grouped by ", selected_plot_grouping_2_box[1]),
+            xaxis_title=selected_plot_grouping_1_box[1],
+            yaxis_title=selected_plot_traits_box[1],
+            showlegend=true,
+            legend=attr(title=attr(text=selected_plot_grouping_2_box[1])),
+            boxmode="group",
+            xaxis = attr(
+                categoryorder = "array",
+                categoryarray = sort(unique(x))
+            ),
+            colorway=colours_per_unique_z,
+        )
         # Update plot
-        plotdata_box = plots_vector_box
-        plotlayout_box = plots_layout_box
+        Dict(
+            "plotdata_box" => plots_vector_box,
+            "plotlayout_box" => plots_layout_box,
+        )
+    end
+
+
+    # When plot button clicked, create box plots for selected traits
+    @in plot_table_box = false
+    @onbutton plot_table_box begin
+        p = reactivebox(
+            df, 
+            selected_plot_traits_box,
+            selected_plot_grouping_1_box,
+            selected_plot_grouping_2_box,
+            selected_plot_colour_scheme_box,
+            n_bins_plot_grouping_1_box,
+            n_bins_plot_grouping_2_box,
+        )
+        plotdata_box = p["plotdata_box"]
+        plotlayout_box = p["plotlayout_box"]
     end
 end
 
@@ -1184,10 +1349,6 @@ function uiplothist()
     ]
 end
 
-selected_plot_colour_scheme_scat
-choices_plot_colour_scheme_scat
-n_bins_plot_scat
-
 function uiplotscat()
     [
         row([
@@ -1195,10 +1356,10 @@ function uiplotscat()
                 Stipple.select(:selected_table_to_plot_scat, useinput=true, options = :choices_tables_to_plot_scat, label = "Table to plot"),
             ]),
             column(size=3, [
-                Stipple.select(:selected_plot_traits_scat_x, useinput=true, options = :choices_plot_traits_scat_x, label = "Trait 1", multiple=false, usechips=false),
+                Stipple.select(:selected_plot_traits_scat_x, useinput=true, options = :choices_plot_traits_scat_x, label = "Trait x", multiple=false, usechips=false),
             ]),
             column(size=3, [
-                Stipple.select(:selected_plot_traits_scat_y, useinput=true, options = :choices_plot_traits_scat_y, label = "Trait 2", multiple=false, usechips=false),
+                Stipple.select(:selected_plot_traits_scat_y, useinput=true, options = :choices_plot_traits_scat_y, label = "Trait y", multiple=false, usechips=false),
             ]),
             column(size=3, [
                 Stipple.select(:selected_plot_groupings_scat, useinput=true, options = :choices_plot_groupings_scat, label = "Grouping", multiple=false, usechips=false),
@@ -1227,10 +1388,13 @@ function uiplotbox()
                 Stipple.select(:selected_plot_traits_box, useinput=true, options = :choices_plot_traits_box, label = "Traits", multiple=false, usechips=false),
             ]),
             column(size=3, [
-                Stipple.select(:selected_plot_grouping_1_box, useinput=true, options = :choices_plot_grouping_1_box, label = "Traits", multiple=false, usechips=false),
+                Stipple.select(:selected_plot_grouping_1_box, useinput=true, options = :choices_plot_grouping_1_box, label = "Grouping 1", multiple=false, usechips=false),
             ]),
             column(size=3, [
-                Stipple.select(:selected_plot_grouping_2_box, useinput=true, options = :choices_plot_grouping_2_box, label = "Traits", multiple=false, usechips=false),
+                Stipple.select(:selected_plot_grouping_2_box, useinput=true, options = :choices_plot_grouping_2_box, label = "Grouping 2", multiple=false, usechips=false),
+            ]),
+            column(size=3, [
+                Stipple.select(:selected_plot_colour_scheme_box, useinput=true, options = :choices_plot_colour_scheme_box, label = "Colour Scheme", multiple=false, usechips=false),
             ]),
         ]),
         btn(
@@ -1260,7 +1424,7 @@ function uiplot()
                     label = "Scatterplot"
                 ),
                 tab(name = "boxplot",
-                    label = "Violin/boxplot"
+                    label = "Boxplot"
                 ),
             ],
         ),
