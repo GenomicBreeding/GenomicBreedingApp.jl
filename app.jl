@@ -611,12 +611,12 @@ DotEnv.load!(joinpath(homedir(), ".env"))
     @out choices_tables_to_plot_box = ["analyses", "trials/entries"]
     
     @in selected_plot_traits_box = []
-    @out choices_plot_traits_box = names(df[2])[13:end]
+    @out choices_plot_traits_box = names(df[3])[13:end]
 
     @in selected_plot_grouping_1_box = []
-    @out choices_plot_grouping_1_box = names(df[2])[13:end]
+    @out choices_plot_grouping_1_box = names(df[3])
     @in selected_plot_grouping_2_box = []
-    @out choices_plot_grouping_2_box = names(df[2])[13:end]
+    @out choices_plot_grouping_2_box = names(df[3])
 
     @in n_bins_plot_grouping_1_box = 5
     @in n_bins_plot_grouping_2_box = 5
@@ -627,8 +627,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
 
     # Create initial box plots
     plots_vector_box = []
-    x = df[2][:, "name"]
-    y = df[2][:, end]
+    x = df[3][:, "name"]
+    y = df[3][:, end]
     # Filter valid points
     idx = findall(.!ismissing.(y) .&& .!isnan.(y) .&& .!isinf.(y))
     x = x[idx]
@@ -646,7 +646,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         choices_plot_grouping_1_box = []
         selected_plot_grouping_2_box = []
         choices_plot_grouping_2_box = []
-        df[2] = if selected_table_to_plot_box == ["analyses"]
+        df[3] = if selected_table_to_plot_box == ["analyses"]
             if nrow(table_query_analyses.data) == 0
                 println("No data to plot")
                 return DataFrame()
@@ -664,14 +664,14 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             println("Unknown table selected")
             return DataFrame()
         end
-        choices_plot_traits_box = if ncol(df[2]) == 0
+        choices_plot_traits_box = if ncol(df[3]) == 0
             ["missing"]
         else
-            @show names(df[2])
-            names(df[2])[13:end]
+            @show names(df[3])
+            names(df[3])[13:end]
         end
-        choices_plot_grouping_1_box = names(df[2])
-        choices_plot_grouping_2_box = names(df[2])
+        choices_plot_grouping_1_box = names(df[3])
+        choices_plot_grouping_2_box = names(df[3])
     end
 
     # TODO: (3/3) parameterise, add tests and docs + move to a separate file
@@ -686,12 +686,12 @@ DotEnv.load!(joinpath(homedir(), ".env"))
     )
         println("Plotting boxplot")
         plots_vector_box = []
-        x = df[2][:, selected_plot_grouping_1_box[1]]
-        y = df[2][:, selected_plot_traits_box[1]]
+        x = df[3][:, selected_plot_grouping_1_box[1]]
+        y = df[3][:, selected_plot_traits_box[1]]
         z = if selected_plot_grouping_1_box == selected_plot_grouping_2_box
             repeat(["missing"], length(y))
         elseif length(selected_plot_grouping_2_box) > 0
-            df[2][:, selected_plot_grouping_2_box[1]]
+            df[3][:, selected_plot_grouping_2_box[1]]
         else
             repeat(["missing"], length(y))
         end
