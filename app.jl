@@ -81,7 +81,6 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         end
         progress_analyses = true
         table_query_analyses = DataTable(queryanalyses(analyses=analyses, verbose=true))
-        @show table_query_analyses.data
         progress_analyses = false
     end
     @event download_analyses begin
@@ -324,507 +323,499 @@ DotEnv.load!(joinpath(homedir(), ".env"))
     # Histogram plotting functionality
     #####################################################
     
-    # Define reactive inputs for histogram plot
-    @in selected_table_to_plot_hist = ["analyses"] # Which table to plot from
-    @out choices_tables_to_plot_hist = ["analyses", "trials/entries"] # Available table choices
-    @in selected_plot_traits_hist = [] # Which traits to plot histograms for
-    @out choices_plot_traits_hist = names(df[1])[13:end] # Available trait choices (columns 13+ contain trait data)
+        # Define reactive inputs for histogram plot
+        @in selected_table_to_plot_hist::Vector{String} = ["analyses"] # Which table to plot from
+        @out choices_tables_to_plot_hist::Vector{String} = ["analyses", "trials/entries"] # Available table choices
+        @in selected_plot_traits_hist::Vector{String} = [] # Which traits to plot histograms for
+        @out choices_plot_traits_hist::Vector{String} = names(df[1])[13:end] # Available trait choices (columns 13+ contain trait data)
 
-    # Create initial histogram plots for all traits
-    plots_vector_hist = []
-    for t in names(df[1])[13:end]
-        push!(plots_vector_hist, PlotlyBase.histogram(x=df[1][!, t]))
-    end
-    plots_layout_hist = PlotlyBase.Layout(barmode="overlay")
-    @out plotdata_hist = plots_vector_hist
-    @out plotlayout_hist = plots_layout_hist
+        @in selected_agg_func_per_season_hist::Vector{String} = ["missing"]
+        @out choices_agg_func_per_season_hist::Vector{String} = ["sum", "mean", "missing"]
 
-    # When user changes selected table, update available trait choices
-    @onchange selected_table_to_plot_hist begin
-        selected_plot_traits_hist = []
-        choices_plot_traits_hist = []
-        # Get data from selected table
-        df[1] = if selected_table_to_plot_hist == ["analyses"]
-            if nrow(table_query_analyses.data) == 0
-                println("No data to plot")
-                return DataFrame()
-            else
-                table_query_analyses.data
-            end
-        elseif selected_table_to_plot_hist == ["trials/entries"]
-            if nrow(table_query_entries.data) == 0
-                println("No data to plot")
-                return DataFrame()
-            else
-                table_query_entries.data
-            end
-        else
-            println("Unknown table selected")
-            return DataFrame()
-        end
-        # Update trait choices
-        choices_plot_traits_hist = if ncol(df[1]) == 0
-            ["missing"]
-        else
-            @show names(df[1])
-            names(df[1])[13:end]
-        end
-    end
-
-    # TODO: (1/3) parameterise, add tests and docs + move to a separate file
-    function reactivehist(df, selected_plot_traits_hist)
-        println("Plotting histogram")
+        # Create initial histogram plots for all traits
         plots_vector_hist = []
-        for t in selected_plot_traits_hist
-            @show t
-            @show names(df[1])
-            try 
-                df[1][!, t]
-            catch
-                continue
-            end
-            # Filter out missing/invalid values
-            x = filter(x -> !isnothing(x) && !ismissing(x) && !isinf(x), df[1][!, t])
-            if length(x) < 1
-                continue
-            end
-            push!(plots_vector_hist, PlotlyBase.histogram(x=x, name=t))
+        for t in names(df[1])[13:end]
+            push!(plots_vector_hist, PlotlyBase.histogram(x=df[1][!, t]))
         end
         plots_layout_hist = PlotlyBase.Layout(barmode="overlay")
-        # Update plot
-        Dict(
-            "plotdata_hist" => plots_vector_hist,
-            "plotlayout_hist" => plots_layout_hist,
-        )
-    end
+        @out plotdata_hist = plots_vector_hist
+        @out plotlayout_hist = plots_layout_hist
 
-    # When plot button clicked, create histograms for selected traits
-    @in plot_table_hist = false
-    @onbutton plot_table_hist begin
-        p = reactivehist(df, selected_plot_traits_hist)
-        plotdata_hist = p["plotdata_hist"]
-        plotlayout_hist = p["plotlayout_hist"]
-    end
+
+        function reactivehistdata(
+            df::Vector{DataFrame};
+            selected_table_to_plot_hist::Vector{String},
+            table_query_analyses::DataTable, 
+            table_query_entries::DataTable,
+        )::Dict{String, Union{DataFrame, Vector{String}}}
+            selected_plot_traits_hist::Vector{String} = []
+            choices_plot_traits_hist::Vector{String} = []
+            # Get data from selected table
+            df[1] = if selected_table_to_plot_hist == ["analyses"]
+                if nrow(table_query_analyses.data) == 0
+                    println("No data to plot")
+                    return DataFrame()
+                else
+                    table_query_analyses.data
+                end
+            elseif selected_table_to_plot_hist == ["trials/entries"]
+                if nrow(table_query_entries.data) == 0
+                    println("No data to plot")
+                    return DataFrame()
+                else
+                    table_query_entries.data
+                end
+            else
+                println("Unknown table selected")
+                return DataFrame()
+            end
+            # Update trait choices
+            choices_plot_traits_hist = if ncol(df[1]) == 0
+                ["missing"]
+            else
+                names(df[1])[13:end]
+            end
+            # Output
+            Dict(
+                "df_1" => df[1],
+                "selected_plot_traits_hist" => selected_plot_traits_hist,
+                "choices_plot_traits_hist" => choices_plot_traits_hist,
+            )
+        end
+
+        # When user changes selected table, update available trait choices
+        @onchange selected_table_to_plot_hist begin
+            res = reactivehistdata(
+                df,
+                selected_table_to_plot_hist=selected_table_to_plot_hist,
+                table_query_analyses=table_query_analyses, 
+                table_query_entries=table_query_entries,
+            )
+            df[1] = res["df_1"]
+            selected_plot_traits_hist = res["selected_plot_traits_hist"]
+            choices_plot_traits_hist = res["choices_plot_traits_hist"]
+        end
+
+        function reactivehistplot(df::Vector{DataFrame}; selected_plot_traits_hist::Vector{String}, selected_agg_func_per_season_hist::Vector{String})
+            println("Plotting histogram")
+            plots_vector_hist = []
+            for t in selected_plot_traits_hist
+                try 
+                    df[1][!, t]
+                catch
+                    continue
+                end
+                # Define the input data frame aggregate or not?
+                df_agg = if selected_agg_func_per_season_hist[1] == "sum"
+                    combine(
+                        groupby(df[1], [:year, :season, :site, :replication, :block, :row, :col]), 
+                        [
+                            t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => t, 
+                            t => (x -> "misssing") => "harvest"
+                        ]
+                    )
+                elseif selected_agg_func_per_season_hist[1] == "mean"
+                    combine(
+                        groupby(df[1], [:year, :season, :site, :replication, :block, :row, :col]), 
+                        [
+                            t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => t, 
+                            t => (x -> "misssing") => "harvest"
+                        ]
+                    )
+                else
+                    df[1]
+                end
+                # Filter out missing/invalid values
+                x = filter(x -> !isnothing(x) && !ismissing(x) && !isinf(x), df_agg[!, t])
+                if length(x) < 1
+                    continue
+                end
+                push!(plots_vector_hist, PlotlyBase.histogram(x=x, name=t))
+            end
+            plots_layout_hist = PlotlyBase.Layout(barmode="overlay")
+            # Update plot
+            Dict(
+                "plotdata_hist" => plots_vector_hist,
+                "plotlayout_hist" => plots_layout_hist,
+            )
+        end
+
+        # When plot button clicked, create histograms for selected traits
+        @in plot_table_hist = false
+        @onbutton plot_table_hist begin
+            p = reactivehistplot(
+                df,
+                selected_plot_traits_hist=selected_plot_traits_hist,
+                selected_agg_func_per_season_hist=selected_agg_func_per_season_hist
+            )
+            plotdata_hist = p["plotdata_hist"]
+            plotlayout_hist = p["plotlayout_hist"]
+        end
 
     #####################################################
     # Scatter plot functionality 
     #####################################################
 
-    # Define reactive inputs for scatter plot
-    @in selected_table_to_plot_scat = ["analyses"]
-    @out choices_tables_to_plot_scat = ["analyses", "trials/entries"]
-    @in selected_plot_traits_scat_x = [] # X-axis trait
-    @out choices_plot_traits_scat_x = names(df[2])[13:end]
-    @in selected_plot_traits_scat_y = [] # Y-axis trait  
-    @out choices_plot_traits_scat_y = names(df[2])[13:end]
-    @in selected_plot_groupings_scat = ["name"]
-    @out choices_plot_groupings_scat = names(df[2])
+        # Define reactive inputs for scatter plot
+        @in selected_table_to_plot_scat::Vector{String} = ["analyses"]
+        @out choices_tables_to_plot_scat::Vector{String} = ["analyses", "trials/entries"]
+        @in selected_plot_traits_scat_x::Vector{String} = [] # X-axis trait
+        @out choices_plot_traits_scat_x::Vector{String} = names(df[2])[13:end]
+        @in selected_plot_traits_scat_y::Vector{String} = [] # Y-axis trait  
+        @out choices_plot_traits_scat_y::Vector{String} = names(df[2])[13:end]
+        @in selected_plot_groupings_scat::Vector{String} = ["name"]
+        @out choices_plot_groupings_scat::Vector{String} = names(df[2])
 
-    @in selected_plot_colour_scheme_scat = :seaborn_colorblind
-    @out choices_plot_colour_scheme_scat = [:seaborn_colorblind, :tol_bright, :tol_light, :tol_muted, :okabe_ito, :mk_15]
-    @in n_bins_plot_scat = 5
+        @in selected_plot_colour_scheme_scat = :seaborn_colorblind
+        @out choices_plot_colour_scheme_scat = [:seaborn_colorblind, :tol_bright, :tol_light, :tol_muted, :okabe_ito, :mk_15]
+        @in n_bins_plot_scat = 5
 
-
-    # Create initial scatter plot
-    plots_vector_scat = []
-    x = df[2][:, 13]
-    y = df[2][:, end]
-    # Filter valid points
-    idx = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isinf.(x) .&& .!isinf.(y))
-    x = x[idx]
-    y = y[idx]
-    plots_vector_scat = [PlotlyBase.scatter(x=x, y=y, mode="markers")]
-    plots_layout_scat = PlotlyBase.Layout()
-    @out plotdata_scat = plots_vector_scat
-    @out plotlayout_scat = plots_layout_scat
-
-    # When table selection changes, update trait choices
-    @onchange selected_table_to_plot_scat begin
-        selected_plot_traits_scat_x = []
-        choices_plot_traits_scat_x = []
-        selected_plot_traits_scat_y = []
-        choices_plot_traits_scat_y = []
-        selected_plot_groupings_scat = []
-        choices_plot_groupings_scat = []
-        df[2] = if selected_table_to_plot_scat == ["analyses"]
-            if nrow(table_query_analyses.data) == 0
-                println("No data to plot")
-                return DataFrame()
-            else
-                table_query_analyses.data
-            end
-        elseif selected_table_to_plot_scat == ["trials/entries"]
-            if nrow(table_query_entries.data) == 0
-                println("No data to plot")
-                return DataFrame()
-            else
-                table_query_entries.data
-            end
-        else
-            println("Unknown table selected")
-            return DataFrame()
-        end
-        choices_plot_traits_scat_x = if ncol(df[2]) == 0
-            ["missing"]
-        else
-            names(df[2])[13:end]
-        end
-        choices_plot_traits_scat_y = if ncol(df[2]) == 0
-            ["missing"]
-        else
-            names(df[2])[13:end]
-        end
-        choices_plot_groupings_scat = names(df[2])
-    end
-
-    # TODO: (2/3) parameterise, add tests and docs + move to a separate file
-    function reactivescatter(df, selected_plot_traits_scat_x, selected_plot_traits_scat_y, selected_plot_groupings_scat, n_bins_plot_scat, selected_plot_colour_scheme_scat)
-        println("Plotting scatterplot")
-        x = df[2][!, selected_plot_traits_scat_x[1]]
-        y = df[2][!, selected_plot_traits_scat_y[1]]
-        z = df[2][!, selected_plot_groupings_scat[1]]
-        # Set up color scheme for points
-        z = begin
-            z_new = repeat(["missing"], length(z))
-            idx = findall(.!ismissing.(z))
-            if (length(idx) > 0) && !isa(z[idx[1]], String) 
-                idx = findall(.!ismissing.(z) .&& .!isnan.(z) .&& .!isinf.(z))
-                n = if n_bins_plot_scat > length(z)
-                    length(z)
-                else
-                    n_bins_plot_scat
-                end
-                unique_z = percentile(
-                    filter(z -> !ismissing(z) && !isnan(z) && !isinf(z), z), 
-                    100 .* collect(0:1/n:1)
-                )
-                m1 = length(split(string(maximum(round.(unique_z))), ".")[1])
-                m2 = 4
-                for (j, z_level) in enumerate(unique_z)
-                    if j == 1
-                        continue
-                    end
-                    idx_sub = if j == 2
-                        # include the minimum
-                        filter(i -> (z[i] >= unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
-                    else
-                        filter(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
-                    end
-                    ini = begin
-                        ini = string((round(unique_z[j-1], digits=4)))
-                        join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
-                    end
-                    fin = begin
-                        fin = string((round(unique_z[j], digits=4)))
-                        join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
-                    end
-                    z_new[idx_sub] .= string(ini, " - ", fin)
-                end
-            else
-                z_new[idx] = z[idx]
-            end
-            z_new
-        end
-        # Map colours to points
-        unique_z = sort(unique(z))
-        colours_per_unique_z = try
-            colorschemes[selected_plot_colour_scheme_scat][1:length(unique_z)]
-        catch
-            repeat(
-                colorschemes[selected_plot_colour_scheme_scat][1:end], 
-                outer=Int(ceil(length(unique_z)/length(colorschemes[selected_plot_colour_scheme_scat])))
-            )[1:length(unique_z)]
-        end
-        # colours = [colours_per_unique_z[unique_z .== zi][1] for zi in z]
-        # Create hover text for each point
-        hovertext = [
-            join(
-                filter(x -> !isnothing(x) && split(x, ": ")[end] != "missing", [
-                    # Trials and phenomes
-                    "name" ∈ names(df[2]) ? string("name: ", df[2].name[i]) : nothing,
-                    "population" ∈ names(df[2]) ? string("population: ", df[2].population[i]) : nothing,
-                    "year" ∈ names(df[2]) ? string("year: ", df[2].year[i]) : nothing,
-                    "season" ∈ names(df[2]) ? string("season: ", df[2].season[i]) : nothing,
-                    "site" ∈ names(df[2]) ? string("site: ", df[2].site[i]) : nothing,
-                    "harvest" ∈ names(df[2]) ? string("harvest: ", df[2].harvest[i]) : nothing,
-                    "replication" ∈ names(df[2]) ? string("replication: ", df[2].replication[i]) : nothing,
-                    "block" ∈ names(df[2]) ? string("block: ", df[2].block[i]) : nothing,
-                    "row" ∈ names(df[2]) ? string("row: ", df[2].row[i]) : nothing,
-                    "column" ∈ names(df[2]) ? string("column: ", df[2].column[i]) : nothing,
-                    # CVs
-                    "fold" ∈ names(df[2]) ? string("fold: ", df[2].fold[i]) : nothing,
-                    string(selected_plot_traits_scat_x[1], ": ", round(x[i], digits=4)),
-                    string(selected_plot_traits_scat_y[1], ": ", round(y[i], digits=4))
-                ]), "<br>"
-            ) for i in 1:length(x)
-        ]
-
-        # Create scatter plot for each group
+        @out choices_agg_func_per_season_scat::Vector{String} = ["sum", "mean", "missing"]
+        @in selected_agg_func_per_season_scat_x::Vector{String} = ["missing"]
+        @in selected_agg_func_per_season_scat_y::Vector{String} = ["missing"]
+        
+        # Create initial scatter plot
         plots_vector_scat = []
-        @show unique_z
-        for (j, g) in enumerate(unique_z)
-            group_indices = filter(i -> z[i] == g, idx)
-            push!(plots_vector_scat, 
-                scatter(
-                    x=x[group_indices], 
-                    y=y[group_indices], 
-                    mode="markers", 
-                    hoverinfo="text", 
-                    hovertext=hovertext[group_indices],
-                    # marker=attr(color=colours[group_indices]), 
-                    name=g
+        x = df[2][:, 13]
+        y = df[2][:, end]
+        # Filter valid points
+        idx = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isinf.(x) .&& .!isinf.(y))
+        x = x[idx]
+        y = y[idx]
+        plots_vector_scat = [PlotlyBase.scatter(x=x, y=y, mode="markers")]
+        plots_layout_scat = PlotlyBase.Layout()
+        @out plotdata_scat = plots_vector_scat
+        @out plotlayout_scat = plots_layout_scat
+
+        # When table selection changes, update trait choices
+        @onchange selected_table_to_plot_scat begin
+            selected_plot_traits_scat_x = []
+            choices_plot_traits_scat_x = []
+            selected_plot_traits_scat_y = []
+            choices_plot_traits_scat_y = []
+            selected_plot_groupings_scat = []
+            choices_plot_groupings_scat = []
+            df[2] = if selected_table_to_plot_scat == ["analyses"]
+                if nrow(table_query_analyses.data) == 0
+                    println("No data to plot")
+                    return DataFrame()
+                else
+                    table_query_analyses.data
+                end
+            elseif selected_table_to_plot_scat == ["trials/entries"]
+                if nrow(table_query_entries.data) == 0
+                    println("No data to plot")
+                    return DataFrame()
+                else
+                    table_query_entries.data
+                end
+            else
+                println("Unknown table selected")
+                return DataFrame()
+            end
+            choices_plot_traits_scat_x = if ncol(df[2]) == 0
+                ["missing"]
+            else
+                names(df[2])[13:end]
+            end
+            choices_plot_traits_scat_y = if ncol(df[2]) == 0
+                ["missing"]
+            else
+                names(df[2])[13:end]
+            end
+            choices_plot_groupings_scat = names(df[2])
+        end
+
+
+        # TODO: add option to aggregate the y-values per season, year, sites, etc..
+
+        # TODO: (2/3) parameterise, add tests and docs + move to a separate file
+        function reactivescatter(
+            df::Vector{DataFrame};
+            selected_plot_traits_scat_x::Vector{String},
+            selected_plot_traits_scat_y::Vector{String},
+            selected_plot_groupings_scat::Vector{String},
+            selected_agg_func_per_season_scat_x::Vector{String},
+            selected_agg_func_per_season_scat_y::Vector{String},
+            n_bins_plot_scat::Int64,
+            selected_plot_colour_scheme_scat::Symbol
+        )::Dict{String, Any}
+            println("Plotting scatterplot")
+            # Aggregate x
+            t = selected_plot_traits_scat_x[1]
+            df_agg_x, x_agg = if selected_agg_func_per_season_scat_x[1] == "sum"
+                x_agg = string(t, "_sum")
+                df_agg = combine(
+                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :classification, :name, :population]), 
+                    [
+                        t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
+                        t => (x -> "misssing") => "harvest"
+                    ]
                 )
+                (df_agg, x_agg)
+            elseif selected_agg_func_per_season_scat_x[1] == "mean"
+                x_agg = string(t, "_mean")
+                df_agg = combine(
+                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :classification, :name, :population]), 
+                    [
+                        t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
+                        t => (x -> "misssing") => "harvest"
+                    ]
+                )
+                (df_agg, x_agg)
+            else
+                x_agg = string(t, "_no_agg")
+                df_agg = df[2][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :classification, :name, :population, Symbol(t)]]
+                rename!(df_agg, t => x_agg)
+                (df_agg, x_agg)
+            end
+            # Aggregate y
+            t = selected_plot_traits_scat_y[1]
+            df_agg_y, y_agg = if (selected_agg_func_per_season_scat_y[1] == "sum") || ((selected_agg_func_per_season_scat_x[1] == "sum") && (selected_agg_func_per_season_scat_y[1] == "missing"))
+                y_agg = string(t, "_sum")
+                df_agg = combine(
+                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :classification, :name, :population]), 
+                    [
+                        t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
+                        t => (x -> "misssing") => "harvest"
+                    ]
+                )
+                (df_agg, y_agg)
+            elseif (selected_agg_func_per_season_scat_y[1] == "mean") || ((selected_agg_func_per_season_scat_x[1] == "mean") && (selected_agg_func_per_season_scat_y[1] == "missing"))
+                y_agg = string(t, "_mean")
+                df_agg = combine(
+                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :classification, :name, :population]), 
+                    [
+                        t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
+                        t => (x -> "misssing") => "harvest"
+                    ]
+                )
+                (df_agg, y_agg)
+            else
+                y_agg = string(t, "_no_agg")
+                df_agg = df[2][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :classification, :name, :population, Symbol(t)]]
+                rename!(df_agg, t => y_agg)
+                (df_agg, y_agg)
+            end
+            x_agg, y_agg = if x_agg == y_agg
+                rename!(df_agg_x, x_agg => x_agg * "_1")
+                rename!(df_agg_y, y_agg => y_agg * "_2")
+                (x_agg * "_1", y_agg * "_2")
+            else
+                (x_agg, y_agg)
+            end
+            # Merge
+            df_agg = leftjoin(df_agg_x, df_agg_y, on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :classification, :name, :population]);
+            # Extract x, y, and z values
+            x = df_agg[!, x_agg]
+            y = df_agg[!, y_agg]
+            z = df_agg[!, selected_plot_groupings_scat[1]]
+            # Set up color scheme for points
+            z = begin
+                z_new = repeat(["missing"], length(z))
+                idx = findall(.!ismissing.(z))
+                if (length(idx) > 0) && !isa(z[idx[1]], String) 
+                    idx = findall(.!ismissing.(z) .&& .!isnan.(z) .&& .!isinf.(z))
+                    n = if n_bins_plot_scat > length(z)
+                        length(z)
+                    else
+                        n_bins_plot_scat
+                    end
+                    unique_z = percentile(
+                        filter(z -> !ismissing(z) && !isnan(z) && !isinf(z), z), 
+                        100 .* collect(0:1/n:1)
+                    )
+                    m1 = length(split(string(maximum(round.(unique_z))), ".")[1])
+                    m2 = 4
+                    for (j, z_level) in enumerate(unique_z)
+                        if j == 1
+                            continue
+                        end
+                        idx_sub = if j == 2
+                            # include the minimum
+                            filter(i -> (z[i] >= unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+                        else
+                            filter(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+                        end
+                        ini = begin
+                            ini = string((round(unique_z[j-1], digits=4)))
+                            join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
+                        end
+                        fin = begin
+                            fin = string((round(unique_z[j], digits=4)))
+                            join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
+                        end
+                        z_new[idx_sub] .= string(ini, " - ", fin)
+                    end
+                else
+                    z_new[idx] = z[idx]
+                end
+                z_new
+            end
+            # Map colours to points
+            unique_z = sort(unique(z))
+            colours_per_unique_z = try
+                colorschemes[selected_plot_colour_scheme_scat][1:length(unique_z)]
+            catch
+                repeat(
+                    colorschemes[selected_plot_colour_scheme_scat][1:end], 
+                    outer=Int(ceil(length(unique_z)/length(colorschemes[selected_plot_colour_scheme_scat])))
+                )[1:length(unique_z)]
+            end
+            # colours = [colours_per_unique_z[unique_z .== zi][1] for zi in z]
+            # Create hover text for each point
+            hovertext = [
+                join(
+                    filter(x -> !isnothing(x) && split(x, ": ")[end] != "missing", [
+                        # Trials and phenomes
+                        "name" ∈ names(df_agg) ? string("name: ", df_agg.name[i]) : nothing,
+                        "population" ∈ names(df_agg) ? string("population: ", df_agg.population[i]) : nothing,
+                        "year" ∈ names(df_agg) ? string("year: ", df_agg.year[i]) : nothing,
+                        "season" ∈ names(df_agg) ? string("season: ", df_agg.season[i]) : nothing,
+                        "site" ∈ names(df_agg) ? string("site: ", df_agg.site[i]) : nothing,
+                        "harvest" ∈ names(df_agg) ? string("harvest: ", df_agg.harvest[i]) : nothing,
+                        "replication" ∈ names(df_agg) ? string("replication: ", df_agg.replication[i]) : nothing,
+                        "block" ∈ names(df_agg) ? string("block: ", df_agg.block[i]) : nothing,
+                        "row" ∈ names(df_agg) ? string("row: ", df_agg.row[i]) : nothing,
+                        "column" ∈ names(df_agg) ? string("column: ", df_agg.column[i]) : nothing,
+                        # CVs
+                        "fold" ∈ names(df_agg) ? string("fold: ", df_agg.fold[i]) : nothing,
+                        string(selected_plot_traits_scat_x[1], ": ", round(x[i], digits=4)),
+                        string(selected_plot_traits_scat_y[1], ": ", round(y[i], digits=4))
+                    ]), "<br>"
+                ) for i in 1:length(x)
+            ]
+
+            # Create scatter plot for each group
+            plots_vector_scat = []
+            for (j, g) in enumerate(unique_z)
+                group_indices = filter(i -> z[i] == g, idx)
+                push!(plots_vector_scat, 
+                    scatter(
+                        x=x[group_indices], 
+                        y=y[group_indices], 
+                        mode="markers", 
+                        hoverinfo="text", 
+                        hovertext=hovertext[group_indices],
+                        # marker=attr(color=colours[group_indices]), 
+                        name=g
+                    )
+                )
+            end
+
+            # Set plot layout
+            plots_layout_scat = PlotlyBase.Layout(
+                title=string("Scatterplot of ", selected_plot_traits_scat_x[1], " vs ", selected_plot_traits_scat_y[1]),
+                xaxis_title=selected_plot_traits_scat_x[1],
+                yaxis_title=selected_plot_traits_scat_y[1],
+                showlegend=true,
+                legend=attr(title=attr(text=selected_plot_groupings_scat[1])),
+                colorway=colours_per_unique_z,
+            )
+            # Update plot
+            @show typeof(plots_vector_scat)
+            @show typeof(plots_layout_scat)
+            Dict(
+                "plotdata_scat" => plots_vector_scat,
+                "plotlayout_scat" => plots_layout_scat,
             )
         end
 
-        # Set plot layout
-        plots_layout_scat = PlotlyBase.Layout(
-            title=string("Scatterplot of ", selected_plot_traits_scat_x[1], " vs ", selected_plot_traits_scat_y[1]),
-            xaxis_title=selected_plot_traits_scat_x[1],
-            yaxis_title=selected_plot_traits_scat_y[1],
-            showlegend=true,
-            legend=attr(title=attr(text=selected_plot_groupings_scat[1])),
-            colorway=colours_per_unique_z,
-        )
-        # Update plot
-        Dict(
-            "plotdata_scat" => plots_vector_scat,
-            "plotlayout_scat" => plots_layout_scat,
-        )
-    end
 
-
-    # When plot button clicked, create scatter plot
-    @in plot_table_scat = false
-    @onbutton plot_table_scat begin
-        p = reactivescatter(df, selected_plot_traits_scat_x, selected_plot_traits_scat_y, selected_plot_groupings_scat, n_bins_plot_scat, selected_plot_colour_scheme_scat)
-        plotdata_scat = p["plotdata_scat"]
-        plotlayout_scat = p["plotlayout_scat"]
-    end
+        # When plot button clicked, create scatter plot
+        @in plot_table_scat = false
+        @onbutton plot_table_scat begin
+            p = reactivescatter(
+                df,
+                selected_plot_traits_scat_x=selected_plot_traits_scat_x,
+                selected_plot_traits_scat_y=selected_plot_traits_scat_y,
+                selected_plot_groupings_scat=selected_plot_groupings_scat,
+                selected_agg_func_per_season_scat_x=selected_agg_func_per_season_scat_x,
+                selected_agg_func_per_season_scat_y=selected_agg_func_per_season_scat_y,
+                n_bins_plot_scat=n_bins_plot_scat,
+                selected_plot_colour_scheme_scat=selected_plot_colour_scheme_scat,
+            )
+            plotdata_scat = p["plotdata_scat"]
+            plotlayout_scat = p["plotlayout_scat"]
+        end
 
     #####################################################
     # Box plot functionality
     #####################################################
 
-    # Define reactive inputs for box plot
-    @in selected_table_to_plot_box = ["analyses"]
-    @out choices_tables_to_plot_box = ["analyses", "trials/entries"]
-    
-    @in selected_plot_traits_box = []
-    @out choices_plot_traits_box = names(df[3])[13:end]
+        # Define reactive inputs for box plot
+        @in selected_table_to_plot_box = ["analyses"]
+        @out choices_tables_to_plot_box = ["analyses", "trials/entries"]
+        
+        @in selected_plot_traits_box = []
+        @out choices_plot_traits_box = names(df[3])[13:end]
 
-    @in selected_plot_grouping_1_box = []
-    @out choices_plot_grouping_1_box = names(df[3])
-    @in selected_plot_grouping_2_box = []
-    @out choices_plot_grouping_2_box = names(df[3])
+        @in selected_plot_grouping_1_box = []
+        @out choices_plot_grouping_1_box = names(df[3])
+        @in selected_plot_grouping_2_box = []
+        @out choices_plot_grouping_2_box = names(df[3])
 
-    @in n_bins_plot_grouping_1_box = 5
-    @in n_bins_plot_grouping_2_box = 5
-    @in selected_plot_colour_scheme_box = :seaborn_colorblind
-    @out choices_plot_colour_scheme_box = [:seaborn_colorblind, :tol_bright, :tol_light, :tol_muted, :okabe_ito, :mk_15]
+        @in n_bins_plot_grouping_1_box = 5
+        @in n_bins_plot_grouping_2_box = 5
+        @in selected_plot_colour_scheme_box = :seaborn_colorblind
+        @out choices_plot_colour_scheme_box = [:seaborn_colorblind, :tol_bright, :tol_light, :tol_muted, :okabe_ito, :mk_15]
 
 
 
-    # Create initial box plots
-    plots_vector_box = []
-    x = df[3][:, "name"]
-    y = df[3][:, end]
-    # Filter valid points
-    idx = findall(.!ismissing.(y) .&& .!isnan.(y) .&& .!isinf.(y))
-    x = x[idx]
-    y = y[idx]
-    plots_vector_box = [PlotlyBase.box(x=x, y=y)]
-    plots_layout_box = PlotlyBase.Layout()
-    @out plotdata_box = plots_vector_box
-    @out plotlayout_box = plots_layout_box
-
-    # When table selection changes, update trait choices
-    @onchange selected_table_to_plot_box begin
-        selected_plot_traits_box = []
-        choices_plot_traits_box = []
-        selected_plot_grouping_1_box = []
-        choices_plot_grouping_1_box = []
-        selected_plot_grouping_2_box = []
-        choices_plot_grouping_2_box = []
-        df[3] = if selected_table_to_plot_box == ["analyses"]
-            if nrow(table_query_analyses.data) == 0
-                println("No data to plot")
-                return DataFrame()
-            else
-                table_query_analyses.data
-            end
-        elseif selected_table_to_plot_box == ["trials/entries"]
-            if nrow(table_query_entries.data) == 0
-                println("No data to plot")
-                return DataFrame()
-            else
-                table_query_entries.data
-            end
-        else
-            println("Unknown table selected")
-            return DataFrame()
-        end
-        choices_plot_traits_box = if ncol(df[3]) == 0
-            ["missing"]
-        else
-            @show names(df[3])
-            names(df[3])[13:end]
-        end
-        choices_plot_grouping_1_box = names(df[3])
-        choices_plot_grouping_2_box = names(df[3])
-    end
-
-    # TODO: (3/3) parameterise, add tests and docs + move to a separate file
-    function reactivebox(
-        df, 
-        selected_plot_traits_box,
-        selected_plot_grouping_1_box,
-        selected_plot_grouping_2_box,
-        selected_plot_colour_scheme_box,
-        n_bins_plot_grouping_1_box,
-        n_bins_plot_grouping_2_box,
-    )
-        println("Plotting boxplot")
+        # Create initial box plots
         plots_vector_box = []
-        x = df[3][:, selected_plot_grouping_1_box[1]]
-        y = df[3][:, selected_plot_traits_box[1]]
-        z = if selected_plot_grouping_1_box == selected_plot_grouping_2_box
-            repeat(["missing"], length(y))
-        elseif length(selected_plot_grouping_2_box) > 0
-            df[3][:, selected_plot_grouping_2_box[1]]
-        else
-            repeat(["missing"], length(y))
-        end
-        # Create x bins
-        x = begin
-            x_new = repeat(["missing"], length(x))
-            idx = findall(.!ismissing.(x))
-            if (length(idx) > 0) && !isa(x[idx[1]], String) 
-                idx = findall(.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x))
-                n = if n_bins_plot_grouping_1_box > length(x)
-                    length(x)
-                else
-                    n_bins_plot_grouping_1_box
-                end
-                unique_x = percentile(
-                    filter(x -> !ismissing(x) && !isnan(x) && !isinf(x), x), 
-                    100 .* collect(0:1/n:1)
-                )
-                m1 = length(split(string(maximum(round.(unique_x))), ".")[1])
-                m2 = 4
-                for (j, x_level) in enumerate(unique_x)
-                    if j == 1
-                        continue
-                    end
-                    idx_sub = if j == 2
-                        # include the minimum
-                        filter(i -> (x[i] >= unique_x[j-1]) && (x[i] <= unique_x[j]), idx)
-                    else
-                        filter(i -> (x[i] > unique_x[j-1]) && (x[i] <= unique_x[j]), idx)
-                    end
-                    ini = begin
-                        ini = string((round(unique_x[j-1], digits=4)))
-                        join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
-                    end
-                    fin = begin
-                        fin = string((round(unique_x[j], digits=4)))
-                        join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
-                    end
-                    x_new[idx_sub] .= string(ini, " - ", fin)
-                end
-            else
-                x_new[idx] = x[idx]
-            end
-            x_new
-        end
-        # Create z bins
-        z = begin
-            z_new = repeat(["missing"], length(z))
-            idx = findall(.!ismissing.(z))
-            if (length(idx) > 0) && !isa(z[idx[1]], String) 
-                idx = findall(.!ismissing.(z) .&& .!isnan.(z) .&& .!isinf.(z))
-                n = if n_bins_plot_grouping_2_box > length(z)
-                    length(z)
-                else
-                    n_bins_plot_grouping_2_box
-                end
-                unique_z = percentile(
-                    filter(z -> !ismissing(z) && !isnan(z) && !isinf(z), z), 
-                    100 .* collect(0:1/n:1)
-                )
-                m1 = length(split(string(maximum(round.(unique_z))), ".")[1])
-                m2 = 4
-                for (j, z_level) in enumerate(unique_z)
-                    if j == 1
-                        continue
-                    end
-                    idx_sub = if j == 2
-                        # include the minimum
-                        filter(i -> (z[i] >= unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
-                    else
-                        filter(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
-                    end
-                    ini = begin
-                        ini = string((round(unique_z[j-1], digits=4)))
-                        join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
-                    end
-                    fin = begin
-                        fin = string((round(unique_z[j], digits=4)))
-                        join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
-                    end
-                    z_new[idx_sub] .= string(ini, " - ", fin)
-                end
-            else
-                z_new[idx] = z[idx]
-            end
-            z_new
-        end
-        unique_z = sort(unique(z))
-        colours_per_unique_z = try
-            colorschemes[selected_plot_colour_scheme_box][1:length(unique_z)]
-        catch
-            repeat(
-                colorschemes[selected_plot_colour_scheme_box][1:end], 
-                outer=Int(ceil(length(unique_z)/length(colorschemes[selected_plot_colour_scheme_box])))
-            )[1:length(unique_z)]
-        end
+        x = df[3][:, "name"]
+        y = df[3][:, end]
+        # Filter valid points
         idx = findall(.!ismissing.(y) .&& .!isnan.(y) .&& .!isinf.(y))
-        plots_vector_box = if length(idx) == 0
-            []
-        else
-            plots_vector_box = []
-            for z_level in sort(unique(z))
-                # Filter valid points
-                idx_sub = filter(j -> z[j] == z_level, idx)
-                push!(plots_vector_box, PlotlyBase.box(x=x[idx_sub], y=y[idx_sub], name=z_level, boxmean="sd"))
+        x = x[idx]
+        y = y[idx]
+        plots_vector_box = [PlotlyBase.box(x=x, y=y)]
+        plots_layout_box = PlotlyBase.Layout()
+        @out plotdata_box = plots_vector_box
+        @out plotlayout_box = plots_layout_box
+
+        # When table selection changes, update trait choices
+        @onchange selected_table_to_plot_box begin
+            selected_plot_traits_box = []
+            choices_plot_traits_box = []
+            selected_plot_grouping_1_box = []
+            choices_plot_grouping_1_box = []
+            selected_plot_grouping_2_box = []
+            choices_plot_grouping_2_box = []
+            df[3] = if selected_table_to_plot_box == ["analyses"]
+                if nrow(table_query_analyses.data) == 0
+                    println("No data to plot")
+                    return DataFrame()
+                else
+                    table_query_analyses.data
+                end
+            elseif selected_table_to_plot_box == ["trials/entries"]
+                if nrow(table_query_entries.data) == 0
+                    println("No data to plot")
+                    return DataFrame()
+                else
+                    table_query_entries.data
+                end
+            else
+                println("Unknown table selected")
+                return DataFrame()
             end
-            plots_vector_box
+            choices_plot_traits_box = if ncol(df[3]) == 0
+                ["missing"]
+            else
+                names(df[3])[13:end]
+            end
+            choices_plot_grouping_1_box = names(df[3])
+            choices_plot_grouping_2_box = names(df[3])
         end
-        plots_layout_box = PlotlyBase.Layout(
-            title=string("Boxplot of ", selected_plot_traits_box[1], "<br>    per ", selected_plot_grouping_1_box[1], " grouped by ", selected_plot_grouping_2_box[1]),
-            xaxis_title=selected_plot_grouping_1_box[1],
-            yaxis_title=selected_plot_traits_box[1],
-            showlegend=true,
-            legend=attr(title=attr(text=selected_plot_grouping_2_box[1])),
-            boxmode="group",
-            xaxis = attr(
-                categoryorder = "array",
-                categoryarray = sort(unique(x))
-            ),
-            colorway=colours_per_unique_z,
-        )
-        # Update plot
-        Dict(
-            "plotdata_box" => plots_vector_box,
-            "plotlayout_box" => plots_layout_box,
-        )
-    end
 
 
-    # When plot button clicked, create box plots for selected traits
-    @in plot_table_box = false
-    @onbutton plot_table_box begin
-        p = reactivebox(
+
+        # TODO: add option to aggregate the y-values per season, year, sites, etc..
+        
+        # TODO: (3/3) parameterise, add tests and docs + move to a separate file
+        function reactivebox(
             df, 
             selected_plot_traits_box,
             selected_plot_grouping_1_box,
@@ -833,10 +824,161 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             n_bins_plot_grouping_1_box,
             n_bins_plot_grouping_2_box,
         )
-        plotdata_box = p["plotdata_box"]
-        plotlayout_box = p["plotlayout_box"]
+            println("Plotting boxplot")
+            plots_vector_box = []
+            x = df[3][:, selected_plot_grouping_1_box[1]]
+            y = df[3][:, selected_plot_traits_box[1]]
+            z = if selected_plot_grouping_1_box == selected_plot_grouping_2_box
+                repeat(["missing"], length(y))
+            elseif length(selected_plot_grouping_2_box) > 0
+                df[3][:, selected_plot_grouping_2_box[1]]
+            else
+                repeat(["missing"], length(y))
+            end
+            # Create x bins
+            x = begin
+                x_new = repeat(["missing"], length(x))
+                idx = findall(.!ismissing.(x))
+                if (length(idx) > 0) && !isa(x[idx[1]], String) 
+                    idx = findall(.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x))
+                    n = if n_bins_plot_grouping_1_box > length(x)
+                        length(x)
+                    else
+                        n_bins_plot_grouping_1_box
+                    end
+                    unique_x = percentile(
+                        filter(x -> !ismissing(x) && !isnan(x) && !isinf(x), x), 
+                        100 .* collect(0:1/n:1)
+                    )
+                    m1 = length(split(string(maximum(round.(unique_x))), ".")[1])
+                    m2 = 4
+                    for (j, x_level) in enumerate(unique_x)
+                        if j == 1
+                            continue
+                        end
+                        idx_sub = if j == 2
+                            # include the minimum
+                            filter(i -> (x[i] >= unique_x[j-1]) && (x[i] <= unique_x[j]), idx)
+                        else
+                            filter(i -> (x[i] > unique_x[j-1]) && (x[i] <= unique_x[j]), idx)
+                        end
+                        ini = begin
+                            ini = string((round(unique_x[j-1], digits=4)))
+                            join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
+                        end
+                        fin = begin
+                            fin = string((round(unique_x[j], digits=4)))
+                            join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
+                        end
+                        x_new[idx_sub] .= string(ini, " - ", fin)
+                    end
+                else
+                    x_new[idx] = x[idx]
+                end
+                x_new
+            end
+            # Create z bins
+            z = begin
+                z_new = repeat(["missing"], length(z))
+                idx = findall(.!ismissing.(z))
+                if (length(idx) > 0) && !isa(z[idx[1]], String) 
+                    idx = findall(.!ismissing.(z) .&& .!isnan.(z) .&& .!isinf.(z))
+                    n = if n_bins_plot_grouping_2_box > length(z)
+                        length(z)
+                    else
+                        n_bins_plot_grouping_2_box
+                    end
+                    unique_z = percentile(
+                        filter(z -> !ismissing(z) && !isnan(z) && !isinf(z), z), 
+                        100 .* collect(0:1/n:1)
+                    )
+                    m1 = length(split(string(maximum(round.(unique_z))), ".")[1])
+                    m2 = 4
+                    for (j, z_level) in enumerate(unique_z)
+                        if j == 1
+                            continue
+                        end
+                        idx_sub = if j == 2
+                            # include the minimum
+                            filter(i -> (z[i] >= unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+                        else
+                            filter(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+                        end
+                        ini = begin
+                            ini = string((round(unique_z[j-1], digits=4)))
+                            join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
+                        end
+                        fin = begin
+                            fin = string((round(unique_z[j], digits=4)))
+                            join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
+                        end
+                        z_new[idx_sub] .= string(ini, " - ", fin)
+                    end
+                else
+                    z_new[idx] = z[idx]
+                end
+                z_new
+            end
+            unique_z = sort(unique(z))
+            colours_per_unique_z = try
+                colorschemes[selected_plot_colour_scheme_box][1:length(unique_z)]
+            catch
+                repeat(
+                    colorschemes[selected_plot_colour_scheme_box][1:end], 
+                    outer=Int(ceil(length(unique_z)/length(colorschemes[selected_plot_colour_scheme_box])))
+                )[1:length(unique_z)]
+            end
+            idx = findall(.!ismissing.(y) .&& .!isnan.(y) .&& .!isinf.(y))
+            plots_vector_box = if length(idx) == 0
+                []
+            else
+                plots_vector_box = []
+                for z_level in sort(unique(z))
+                    # Filter valid points
+                    idx_sub = filter(j -> z[j] == z_level, idx)
+                    push!(plots_vector_box, PlotlyBase.box(x=x[idx_sub], y=y[idx_sub], name=z_level, boxmean="sd"))
+                end
+                plots_vector_box
+            end
+            plots_layout_box = PlotlyBase.Layout(
+                title=string("Boxplot of ", selected_plot_traits_box[1], "<br>    per ", selected_plot_grouping_1_box[1], " grouped by ", selected_plot_grouping_2_box[1]),
+                xaxis_title=selected_plot_grouping_1_box[1],
+                yaxis_title=selected_plot_traits_box[1],
+                showlegend=true,
+                legend=attr(title=attr(text=selected_plot_grouping_2_box[1])),
+                boxmode="group",
+                xaxis = attr(
+                    categoryorder = "array",
+                    categoryarray = sort(unique(x))
+                ),
+                colorway=colours_per_unique_z,
+            )
+            # Update plot
+            Dict(
+                "plotdata_box" => plots_vector_box,
+                "plotlayout_box" => plots_layout_box,
+            )
+        end
+
+
+        # When plot button clicked, create box plots for selected traits
+        @in plot_table_box = false
+        @onbutton plot_table_box begin
+            p = reactivebox(
+                df, 
+                selected_plot_traits_box,
+                selected_plot_grouping_1_box,
+                selected_plot_grouping_2_box,
+                selected_plot_colour_scheme_box,
+                n_bins_plot_grouping_1_box,
+                n_bins_plot_grouping_2_box,
+            )
+            plotdata_box = p["plotdata_box"]
+            plotlayout_box = p["plotlayout_box"]
+        end
     end
-end
+
+######################################################################################################################
 
 
 
@@ -1337,8 +1479,11 @@ end
 
 function uiplothist()
     [
-        Stipple.select(:selected_table_to_plot_hist, useinput=true, options = :choices_tables_to_plot_hist, label = "Table to plot"),
-        Stipple.select(:selected_plot_traits_hist, useinput=true, options = :choices_plot_traits_hist, label = "Traits", multiple=true, usechips=true),
+        row([
+            column(size=3, [Stipple.select(:selected_table_to_plot_hist, useinput=true, options = :choices_tables_to_plot_hist, label = "Table to plot"),]),
+            column(size=3, [Stipple.select(:selected_plot_traits_hist, useinput=true, options = :choices_plot_traits_hist, label = "Traits", multiple=true, usechips=true),]),
+            column(size=3, [Stipple.select(:selected_agg_func_per_season_hist, useinput=true, options = :choices_agg_func_per_season_hist, label = "Aggregator per season", multiple=false, usechips=false),]),
+        ]),
         btn(
             "Plot",
             @click(:plot_table_hist),
@@ -1352,21 +1497,15 @@ end
 function uiplotscat()
     [
         row([
-            column(size=3, [
-                Stipple.select(:selected_table_to_plot_scat, useinput=true, options = :choices_tables_to_plot_scat, label = "Table to plot"),
-            ]),
-            column(size=3, [
-                Stipple.select(:selected_plot_traits_scat_x, useinput=true, options = :choices_plot_traits_scat_x, label = "Trait x", multiple=false, usechips=false),
-            ]),
-            column(size=3, [
-                Stipple.select(:selected_plot_traits_scat_y, useinput=true, options = :choices_plot_traits_scat_y, label = "Trait y", multiple=false, usechips=false),
-            ]),
-            column(size=3, [
-                Stipple.select(:selected_plot_groupings_scat, useinput=true, options = :choices_plot_groupings_scat, label = "Grouping", multiple=false, usechips=false),
-            ]),
-            column(size=3, [
-                Stipple.select(:selected_plot_colour_scheme_scat, useinput=true, options = :choices_plot_colour_scheme_scat, label = "Colour Scheme", multiple=false, usechips=false),
-            ]),
+            column(size=3, [Stipple.select(:selected_table_to_plot_scat, useinput=true, options = :choices_tables_to_plot_scat, label = "Table to plot"),]),
+            column(size=3, [Stipple.select(:selected_plot_traits_scat_x, useinput=true, options = :choices_plot_traits_scat_x, label = "Trait x", multiple=false, usechips=false),]),
+            column(size=3, [Stipple.select(:selected_plot_traits_scat_y, useinput=true, options = :choices_plot_traits_scat_y, label = "Trait y", multiple=false, usechips=false),]),
+            column(size=3, [Stipple.select(:selected_plot_groupings_scat, useinput=true, options = :choices_plot_groupings_scat, label = "Grouping", multiple=false, usechips=false),]),
+        ]),
+        row([
+            column(size=3, [Stipple.select(:selected_plot_colour_scheme_scat, useinput=true, options = :choices_plot_colour_scheme_scat, label = "Colour Scheme", multiple=false, usechips=false),]),
+            column(size=3, [Stipple.select(:selected_agg_func_per_season_scat_x, useinput=true, options = :choices_agg_func_per_season_scat, label = "x-aggregator per season", multiple=false, usechips=false),]),
+            column(size=3, [Stipple.select(:selected_agg_func_per_season_scat_y, useinput=true, options = :choices_agg_func_per_season_scat, label = "y-aggregator per season", multiple=false, usechips=false),]),
         ]),
         btn(
             "Plot",
