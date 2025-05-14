@@ -15,11 +15,13 @@ DotEnv.load!(joinpath(homedir(), ".env"))
     @in tab_selected_main = "search_and_download"
     @in tab_selected_queries = "base_tables"
     @in tab_selected_plot = "histogram"
+    
+    idx_col_start_numeric_pheno_tables = 18
 
 #####################################################################################################################
 # Base tables
     df_analyses = string.(sort(querytable("analyses", fields=["name", "description"])))
-    df_entries = string.(sort(querytable("entries", fields=["name", "species", "classification", "population", "description"])))
+    df_entries = string.(sort(querytable("entries", fields=["name", "species", "ploidy", "crop_duration", "description", "individual_or_pool", "population", "maternal_family", "paternal_family", "cultivar"])))
     df_traits = string.(sort(querytable("traits", fields=["name", "description"])))
     df_trials = string.(sort(querytable("trials", fields=["year", "season", "harvest", "site", "description"])))
     df_layouts = string.(sort(querytable("layouts", fields=["replication", "block", "row", "col"])))
@@ -114,17 +116,43 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             species_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), species_list)
         end
     end
-    # Classifications
-    classifications_list = sort(unique(df_entries.classification))
-    @in classifications_filter_text = ""             # Input from the text field
-    @in classifications_selected_options::Union{Nothing, Vector{String}} = nothing
-    @in classifications_filtered_options = classifications_list   # Output/state: starts with all options
-    @onchange classifications_filter_text begin
-        search_term = lowercase(classifications_filter_text)
+    # Ploidies
+    ploidies_list = sort(unique(df_entries.ploidy))
+    @in ploidies_filter_text = ""             # Input from the text field
+    @in ploidies_selected_options::Union{Nothing, Vector{String}} = nothing
+    @in ploidies_filtered_options = ploidies_list   # Output/state: starts with all options
+    @onchange ploidies_filter_text begin
+        search_term = lowercase(ploidies_filter_text)
         if isempty(search_term)
-            classifications_filtered_options = classifications_list
+            ploidies_filtered_options = ploidies_list
         else
-            classifications_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), classifications_list)
+            ploidies_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), ploidies_list)
+        end
+    end
+    # Crop duration
+    crop_durations_list = sort(unique(df_entries.crop_duration))
+    @in crop_durations_filter_text = ""             # Input from the text field
+    @in crop_durations_selected_options::Union{Nothing, Vector{String}} = nothing
+    @in crop_durations_filtered_options = crop_durations_list   # Output/state: starts with all options
+    @onchange crop_durations_filter_text begin
+        search_term = lowercase(crop_durations_filter_text)
+        if isempty(search_term)
+            crop_durations_filtered_options = crop_durations_list
+        else
+            crop_durations_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), crop_durations_list)
+        end
+    end
+    # Individuals or pools
+    individuals_or_pools_list = sort(unique(df_entries.individual_or_pool))
+    @in individuals_or_pools_filter_text = ""             # Input from the text field
+    @in individuals_or_pools_selected_options::Union{Nothing, Vector{String}} = nothing
+    @in individuals_or_pools_filtered_options = individuals_or_pools_list   # Output/state: starts with all options
+    @onchange individuals_or_pools_filter_text begin
+        search_term = lowercase(individuals_or_pools_filter_text)
+        if isempty(search_term)
+            individuals_or_pools_filtered_options = individuals_or_pools_list
+        else
+            individuals_or_pools_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), individuals_or_pools_list)
         end
     end
     # Populations
@@ -138,6 +166,45 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             populations_filtered_options = populations_list
         else
             populations_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), populations_list)
+        end
+    end
+    # Maternal families
+    maternal_families_list = sort(unique(df_entries.maternal_family))
+    @in maternal_families_filter_text = ""             # Input from the text field
+    @in maternal_families_selected_options::Union{Nothing, Vector{String}} = nothing
+    @in maternal_families_filtered_options = maternal_families_list   # Output/state: starts with all options
+    @onchange maternal_families_filter_text begin
+        search_term = lowercase(maternal_families_filter_text)
+        if isempty(search_term)
+            maternal_families_filtered_options = maternal_families_list
+        else
+            maternal_families_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), maternal_families_list)
+        end
+    end
+    # Paternal families
+    paternal_families_list = sort(unique(df_entries.paternal_family))
+    @in paternal_families_filter_text = ""             # Input from the text field
+    @in paternal_families_selected_options::Union{Nothing, Vector{String}} = nothing
+    @in paternal_families_filtered_options = paternal_families_list   # Output/state: starts with all options
+    @onchange paternal_families_filter_text begin
+        search_term = lowercase(paternal_families_filter_text)
+        if isempty(search_term)
+            paternal_families_filtered_options = paternal_families_list
+        else
+            paternal_families_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), paternal_families_list)
+        end
+    end
+    # Cultivars
+    cultivars_list = sort(unique(df_entries.cultivar))
+    @in cultivars_filter_text = ""             # Input from the text field
+    @in cultivars_selected_options::Union{Nothing, Vector{String}} = nothing
+    @in cultivars_filtered_options = cultivars_list   # Output/state: starts with all options
+    @onchange cultivars_filter_text begin
+        search_term = lowercase(cultivars_filter_text)
+        if isempty(search_term)
+            cultivars_filtered_options = cultivars_list
+        else
+            cultivars_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), cultivars_list)
         end
     end
     # Entries
@@ -269,34 +336,44 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             progress_entries = true
             traits::Vector{String} = isnothing(traits_selected_options) ? traits_list : traits_selected_options
             species::Vector{Union{String, Missing}} = isnothing(species_selected_options) ? [x == "missing" ? missing : x for x in species_list] : [x == "missing" ? missing : x for x in species_selected_options]
-                classifications::Vector{Union{String, Missing}} = isnothing(classifications_selected_options) ? [x == "missing" ? missing : x for x in classifications_list] : [x == "missing" ? missing : x for x in classifications_selected_options]
-                populations::Vector{Union{String, Missing}} = isnothing(populations_selected_options) ? [x == "missing" ? missing : x for x in populations_list] : [x == "missing" ? missing : x for x in populations_selected_options]
-                entries::Vector{Union{String, Missing}} = isnothing(entries_selected_options) ? [x == "missing" ? missing : x for x in entries_list] : [x == "missing" ? missing : x for x in entries_selected_options]
-                years::Vector{Union{Missing, String}} = isnothing(years_selected_options) ? [x == "missing" ? missing : x for x in years_list] : [x == "missing" ? missing : x for x in years_selected_options]
-                seasons::Vector{Union{String, Missing}} = isnothing(seasons_selected_options) ? [x == "missing" ? missing : x for x in seasons_list] : [x == "missing" ? missing : x for x in seasons_selected_options]
-                harvests::Vector{Union{String, Missing}} = isnothing(harvests_selected_options) ? [x == "missing" ? missing : x for x in harvests_list] : [x == "missing" ? missing : x for x in harvests_selected_options]
-                sites::Vector{Union{String, Missing}} = isnothing(sites_selected_options) ? [x == "missing" ? missing : x for x in sites_list] : [x == "missing" ? missing : x for x in sites_selected_options]
-                replications::Vector{Union{String, Missing}} = isnothing(replications_selected_options) ? [x == "missing" ? missing : x for x in replications_list] : [x == "missing" ? missing : x for x in replications_selected_options]
-                blocks::Vector{Union{String, Missing}} = isnothing(blocks_selected_options) ? [x == "missing" ? missing : x for x in blocks_list] : [x == "missing" ? missing : x for x in blocks_selected_options]
-                rows::Vector{Union{String, Missing}} = isnothing(rows_selected_options) ? [x == "missing" ? missing : x for x in rows_list] : [x == "missing" ? missing : x for x in rows_selected_options]            
-                cols::Vector{Union{String, Missing}} = isnothing(cols_selected_options) ? [x == "missing" ? missing : x for x in cols_list] : [x == "missing" ? missing : x for x in cols_selected_options]            
-                table_query_entries = DataTable(querytrialsandphenomes(
-                    traits = traits, # cannot be missing
-                    species = species,
-                    classifications = classifications,
-                    populations = populations,
-                    entries = entries,
-                    years = years,
-                    seasons = seasons,
-                    harvests = harvests,
-                    sites = sites,
-                    replications = replications,
-                    blocks = blocks,
-                    rows = rows,
-                    cols = cols,
-                    verbose = true,
-                ))
-                progress_entries = false
+            ploidies::Vector{Union{String, Missing}} = isnothing(ploidies_selected_options) ? [x == "missing" ? missing : x for x in ploidies_list] : [x == "missing" ? missing : x for x in ploidies_selected_options]
+            crop_durations::Vector{Union{String, Missing}} = isnothing(crop_durations_selected_options) ? [x == "missing" ? missing : x for x in crop_durations_list] : [x == "missing" ? missing : x for x in crop_durations_selected_options]
+            individuals_or_pools::Vector{Union{String, Missing}} = isnothing(individuals_or_pools_selected_options) ? [x == "missing" ? missing : x for x in individuals_or_pools_list] : [x == "missing" ? missing : x for x in individuals_or_pools_selected_options]
+            populations::Vector{Union{String, Missing}} = isnothing(populations_selected_options) ? [x == "missing" ? missing : x for x in populations_list] : [x == "missing" ? missing : x for x in populations_selected_options]
+            maternal_families::Vector{Union{String, Missing}} = isnothing(maternal_families_selected_options) ? [x == "missing" ? missing : x for x in maternal_families_list] : [x == "missing" ? missing : x for x in maternal_families_selected_options]
+            paternal_families::Vector{Union{String, Missing}} = isnothing(paternal_families_selected_options) ? [x == "missing" ? missing : x for x in paternal_families_list] : [x == "missing" ? missing : x for x in paternal_families_selected_options]
+            cultivars::Vector{Union{String, Missing}} = isnothing(cultivars_selected_options) ? [x == "missing" ? missing : x for x in cultivars_list] : [x == "missing" ? missing : x for x in cultivars_selected_options]
+            entries::Vector{Union{String, Missing}} = isnothing(entries_selected_options) ? [x == "missing" ? missing : x for x in entries_list] : [x == "missing" ? missing : x for x in entries_selected_options]
+            years::Vector{Union{Missing, String}} = isnothing(years_selected_options) ? [x == "missing" ? missing : x for x in years_list] : [x == "missing" ? missing : x for x in years_selected_options]
+            seasons::Vector{Union{String, Missing}} = isnothing(seasons_selected_options) ? [x == "missing" ? missing : x for x in seasons_list] : [x == "missing" ? missing : x for x in seasons_selected_options]
+            harvests::Vector{Union{String, Missing}} = isnothing(harvests_selected_options) ? [x == "missing" ? missing : x for x in harvests_list] : [x == "missing" ? missing : x for x in harvests_selected_options]
+            sites::Vector{Union{String, Missing}} = isnothing(sites_selected_options) ? [x == "missing" ? missing : x for x in sites_list] : [x == "missing" ? missing : x for x in sites_selected_options]
+            replications::Vector{Union{String, Missing}} = isnothing(replications_selected_options) ? [x == "missing" ? missing : x for x in replications_list] : [x == "missing" ? missing : x for x in replications_selected_options]
+            blocks::Vector{Union{String, Missing}} = isnothing(blocks_selected_options) ? [x == "missing" ? missing : x for x in blocks_list] : [x == "missing" ? missing : x for x in blocks_selected_options]
+            rows::Vector{Union{String, Missing}} = isnothing(rows_selected_options) ? [x == "missing" ? missing : x for x in rows_list] : [x == "missing" ? missing : x for x in rows_selected_options]            
+            cols::Vector{Union{String, Missing}} = isnothing(cols_selected_options) ? [x == "missing" ? missing : x for x in cols_list] : [x == "missing" ? missing : x for x in cols_selected_options]            
+            table_query_entries = DataTable(querytrialsandphenomes(
+                traits = traits, # cannot be missing
+                species = species,
+                ploidies = ploidies,
+                crop_durations = crop_durations,
+                individuals_or_pools = individuals_or_pools,
+                populations = populations,
+                maternal_families = maternal_families,
+                paternal_families = paternal_families,
+                cultivars = cultivars,
+                entries = entries,
+                years = years,
+                seasons = seasons,
+                harvests = harvests,
+                sites = sites,
+                replications = replications,
+                blocks = blocks,
+                rows = rows,
+                cols = cols,
+                verbose = true,
+            ))
+            progress_entries = false
         else
             table_query_entries = DataTable(DataFrame(var"Phenotypes not requested"="no phenotype data requested"))
         end
@@ -327,14 +404,14 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         @in selected_table_to_plot_hist::Vector{String} = ["analyses"] # Which table to plot from
         @out choices_tables_to_plot_hist::Vector{String} = ["analyses", "trials/entries"] # Available table choices
         @in selected_plot_traits_hist::Vector{String} = [] # Which traits to plot histograms for
-        @out choices_plot_traits_hist::Vector{String} = names(df[1])[13:end] # Available trait choices (columns 13+ contain trait data)
+        @out choices_plot_traits_hist::Vector{String} = names(df[1])[idx_col_start_numeric_pheno_tables:end] # Available trait choices (columns idx_col_start_numeric_pheno_tables+ contain trait data)
 
         @in selected_agg_func_per_season_hist::Vector{String} = ["missing"]
         @out choices_agg_func_per_season_hist::Vector{String} = ["sum", "mean", "missing"]
 
         # Create initial histogram plots for all traits
         plots_vector_hist = []
-        for t in names(df[1])[13:end]
+        for t in names(df[1])[idx_col_start_numeric_pheno_tables:end]
             push!(plots_vector_hist, PlotlyBase.histogram(x=df[1][!, t]))
         end
         plots_layout_hist = PlotlyBase.Layout(barmode="overlay")
@@ -373,7 +450,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             choices_plot_traits_hist = if ncol(df[1]) == 0
                 ["missing"]
             else
-                names(df[1])[13:end]
+                names(df[1])[idx_col_start_numeric_pheno_tables:end]
             end
             # Output
             Dict(
@@ -430,7 +507,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 if length(x) < 1
                     continue
                 end
-                push!(plots_vector_hist, PlotlyBase.histogram(x=x, name=t))
+                push!(plots_vector_hist, PlotlyBase.histogram(x=x, opacity=0.5, name=t))
             end
             plots_layout_hist = PlotlyBase.Layout(barmode="overlay")
             # Update plot
@@ -460,9 +537,9 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         @in selected_table_to_plot_scat::Vector{String} = ["analyses"]
         @out choices_tables_to_plot_scat::Vector{String} = ["analyses", "trials/entries"]
         @in selected_plot_traits_scat_x::Vector{String} = [] # X-axis trait
-        @out choices_plot_traits_scat_x::Vector{String} = names(df[2])[13:end]
+        @out choices_plot_traits_scat_x::Vector{String} = names(df[2])[idx_col_start_numeric_pheno_tables:end]
         @in selected_plot_traits_scat_y::Vector{String} = [] # Y-axis trait  
-        @out choices_plot_traits_scat_y::Vector{String} = names(df[2])[13:end]
+        @out choices_plot_traits_scat_y::Vector{String} = names(df[2])[idx_col_start_numeric_pheno_tables:end]
         @in selected_plot_groupings_scat::Vector{String} = ["name"]
         @out choices_plot_groupings_scat::Vector{String} = names(df[2])
 
@@ -470,13 +547,17 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         @out choices_plot_colour_scheme_scat = [:seaborn_colorblind, :tol_bright, :tol_light, :tol_muted, :okabe_ito, :mk_15]
         @in n_bins_plot_scat = 5
 
+        # Filters
+
+
+        # Aggregators
         @out choices_agg_func_per_season_scat::Vector{String} = ["sum", "mean", "missing"]
         @in selected_agg_func_per_season_scat_x::Vector{String} = ["missing"]
         @in selected_agg_func_per_season_scat_y::Vector{String} = ["missing"]
         
         # Create initial scatter plot
         plots_vector_scat = []
-        x = df[2][:, 13]
+        x = df[2][:, idx_col_start_numeric_pheno_tables]
         y = df[2][:, end]
         # Filter valid points
         idx = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isinf.(x) .&& .!isinf.(y))
@@ -495,12 +576,19 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             choices_plot_traits_scat_y = []
             selected_plot_groupings_scat = []
             choices_plot_groupings_scat = []
+            selected_agg_func_per_season_scat_x = ["missing"]
+            selected_agg_func_per_season_scat_y = ["missing"]
             df[2] = if selected_table_to_plot_scat == ["analyses"]
                 if nrow(table_query_analyses.data) == 0
                     println("No data to plot")
                     return DataFrame()
                 else
-                    table_query_analyses.data
+                    @show nrow(table_query_analyses.data)
+                    if nrow(table_query_analyses.data) < 100_000
+                        table_query_analyses.data
+                    else
+                        table_query_analyses.data
+                    end
                 end
             elseif selected_table_to_plot_scat == ["trials/entries"]
                 if nrow(table_query_entries.data) == 0
@@ -516,12 +604,12 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             choices_plot_traits_scat_x = if ncol(df[2]) == 0
                 ["missing"]
             else
-                names(df[2])[13:end]
+                names(df[2])[idx_col_start_numeric_pheno_tables:end]
             end
             choices_plot_traits_scat_y = if ncol(df[2]) == 0
                 ["missing"]
             else
-                names(df[2])[13:end]
+                names(df[2])[idx_col_start_numeric_pheno_tables:end]
             end
             choices_plot_groupings_scat = names(df[2])
         end
@@ -530,6 +618,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         # TODO: add option to aggregate the y-values per season, year, sites, etc..
 
         # TODO: (2/3) parameterise, add tests and docs + move to a separate file
+ 
+
         function reactivescatter(
             df::Vector{DataFrame};
             selected_plot_traits_scat_x::Vector{String},
@@ -546,7 +636,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             df_agg_x, x_agg = if selected_agg_func_per_season_scat_x[1] == "sum"
                 x_agg = string(t, "_sum")
                 df_agg = combine(
-                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :classification, :name, :population]), 
+                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
                     [
                         t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
                         t => (x -> "misssing") => "harvest"
@@ -556,7 +646,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             elseif selected_agg_func_per_season_scat_x[1] == "mean"
                 x_agg = string(t, "_mean")
                 df_agg = combine(
-                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :classification, :name, :population]), 
+                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
                     [
                         t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
                         t => (x -> "misssing") => "harvest"
@@ -565,7 +655,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 (df_agg, x_agg)
             else
                 x_agg = string(t, "_no_agg")
-                df_agg = df[2][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :classification, :name, :population, Symbol(t)]]
+                df_agg = df[2][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
                 rename!(df_agg, t => x_agg)
                 (df_agg, x_agg)
             end
@@ -574,7 +664,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             df_agg_y, y_agg = if (selected_agg_func_per_season_scat_y[1] == "sum") || ((selected_agg_func_per_season_scat_x[1] == "sum") && (selected_agg_func_per_season_scat_y[1] == "missing"))
                 y_agg = string(t, "_sum")
                 df_agg = combine(
-                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :classification, :name, :population]), 
+                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
                     [
                         t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
                         t => (x -> "misssing") => "harvest"
@@ -584,7 +674,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             elseif (selected_agg_func_per_season_scat_y[1] == "mean") || ((selected_agg_func_per_season_scat_x[1] == "mean") && (selected_agg_func_per_season_scat_y[1] == "missing"))
                 y_agg = string(t, "_mean")
                 df_agg = combine(
-                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :classification, :name, :population]), 
+                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
                     [
                         t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
                         t => (x -> "misssing") => "harvest"
@@ -593,7 +683,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 (df_agg, y_agg)
             else
                 y_agg = string(t, "_no_agg")
-                df_agg = df[2][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :classification, :name, :population, Symbol(t)]]
+                df_agg = df[2][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
                 rename!(df_agg, t => y_agg)
                 (df_agg, y_agg)
             end
@@ -604,8 +694,13 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             else
                 (x_agg, y_agg)
             end
+            # Convert missing to "missing"
+            for i in 1:nrow(df_agg_x)
+                df_agg_x[:, 1:(end-1)] .= "missing"
+                df_agg_y[:, 1:(end-1)] .= "missing"
+            end
             # Merge
-            df_agg = leftjoin(df_agg_x, df_agg_y, on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :classification, :name, :population]);
+            df_agg = leftjoin(df_agg_x, df_agg_y, on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]);
             # Extract x, y, and z values
             x = df_agg[!, x_agg]
             y = df_agg[!, y_agg]
@@ -695,6 +790,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                         x=x[group_indices], 
                         y=y[group_indices], 
                         mode="markers", 
+                        opacity=0.75,
                         hoverinfo="text", 
                         hovertext=hovertext[group_indices],
                         # marker=attr(color=colours[group_indices]), 
@@ -713,8 +809,6 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 colorway=colours_per_unique_z,
             )
             # Update plot
-            @show typeof(plots_vector_scat)
-            @show typeof(plots_layout_scat)
             Dict(
                 "plotdata_scat" => plots_vector_scat,
                 "plotlayout_scat" => plots_layout_scat,
@@ -748,7 +842,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         @out choices_tables_to_plot_box = ["analyses", "trials/entries"]
         
         @in selected_plot_traits_box = []
-        @out choices_plot_traits_box = names(df[3])[13:end]
+        @out choices_plot_traits_box = names(df[3])[idx_col_start_numeric_pheno_tables:end]
 
         @in selected_plot_grouping_1_box = []
         @out choices_plot_grouping_1_box = names(df[3])
@@ -804,7 +898,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             choices_plot_traits_box = if ncol(df[3]) == 0
                 ["missing"]
             else
-                names(df[3])[13:end]
+                names(df[3])[idx_col_start_numeric_pheno_tables:end]
             end
             choices_plot_grouping_1_box = names(df[3])
             choices_plot_grouping_2_box = names(df[3])
@@ -1039,7 +1133,7 @@ function uibasetables()
                 :table_base_entries,
                 flat = false,
                 bordered = true,
-                var"row-key" = ["name", "species", "classification", "population"],
+                var"row-key" = ["name", "species", "ploidy", "crop_duration", "individual_or_pool", "maternal_family", "paternal_family", "cultivar", "population"],
                 filter = :table_base_entries_filter,
                 template(
                     var"v-slot:top-right" = "",
@@ -1139,7 +1233,7 @@ function uiqueryanalyses()
             flat = true,
             bordered = true,
             title = "Results",
-            var"row-key" = ["species", "classification", "name", "population"],
+            var"row-key" = ["species", "ploidy", "crop_duration", "individual_or_pool", "maternal_family", "paternal_family", "cultivar", "name", "population"],
             filter = :table_query_analyses_filter,
             template(
                 var"v-slot:top-right" = "",
@@ -1207,16 +1301,52 @@ function uisqueryentries()
                     dense = true,
                 ),
                 textfield(
-                    "Classifications",
-                    @bind(:classifications_filter_text),
+                    "Ploidies",
+                    @bind(:ploidies_filter_text),
                     outlined=true,
                     dense=true,
                     clearable=true,
                     rounded=true,
                 ),
                 Stipple.select(
-                    :classifications_selected_options,
-                    options=:classifications_filtered_options,
+                    :ploidies_selected_options,
+                    options=:ploidies_filtered_options,
+                    useinput=true, 
+                    multiple = true,
+                    clearable = true,
+                    usechips = true,
+                    counter = true,
+                    dense = true,
+                ),
+                textfield(
+                    "Crop durations",
+                    @bind(:crop_durations_filter_text),
+                    outlined=true,
+                    dense=true,
+                    clearable=true,
+                    rounded=true,
+                ),
+                Stipple.select(
+                    :crop_durations_selected_options,
+                    options=:crop_durations_filtered_options,
+                    useinput=true, 
+                    multiple = true,
+                    clearable = true,
+                    usechips = true,
+                    counter = true,
+                    dense = true,
+                ),
+                textfield(
+                    "Individual or pools",
+                    @bind(:individuals_or_pools_filter_text),
+                    outlined=true,
+                    dense=true,
+                    clearable=true,
+                    rounded=true,
+                ),
+                Stipple.select(
+                    :individuals_or_pools_selected_options,
+                    options=:individuals_or_pools_filtered_options,
                     useinput=true, 
                     multiple = true,
                     clearable = true,
@@ -1235,6 +1365,60 @@ function uisqueryentries()
                 Stipple.select(
                     :populations_selected_options,
                     options=:populations_filtered_options,
+                    useinput=true, 
+                    multiple = true,
+                    clearable = true,
+                    usechips = true,
+                    counter = true,
+                    dense = true,
+                ),
+                textfield(
+                    "Maternal families",
+                    @bind(:maternal_families_filter_text),
+                    outlined=true,
+                    dense=true,
+                    clearable=true,
+                    rounded=true,
+                ),
+                Stipple.select(
+                    :maternal_families_selected_options,
+                    options=:maternal_families_filtered_options,
+                    useinput=true, 
+                    multiple = true,
+                    clearable = true,
+                    usechips = true,
+                    counter = true,
+                    dense = true,
+                ),
+                textfield(
+                    "Paternal families",
+                    @bind(:paternal_families_filter_text),
+                    outlined=true,
+                    dense=true,
+                    clearable=true,
+                    rounded=true,
+                ),
+                Stipple.select(
+                    :paternal_families_selected_options,
+                    options=:paternal_families_filtered_options,
+                    useinput=true, 
+                    multiple = true,
+                    clearable = true,
+                    usechips = true,
+                    counter = true,
+                    dense = true,
+                ),
+                textfield(
+                    "Cultivars",
+                    @bind(:cultivars_filter_text),
+                    outlined=true,
+                    dense=true,
+                    clearable=true,
+                    rounded=true,
+                ),
+                Stipple.select(
+                    :cultivars_selected_options,
+                    options=:cultivars_filtered_options,
                     useinput=true, 
                     multiple = true,
                     clearable = true,
@@ -1425,7 +1609,7 @@ function uisqueryentries()
             flat = true,
             bordered = true,
             title = "Entries",
-            var"row-key" = ["species", "classification", "name", "population", "year", "season", "harvest", "site", "replication", "block", "row", "col"],
+            var"row-key" = ["species", "ploidy", "crop_duration", "individual_or_pool", "maternal_family", "paternal_family", "cultivar", "name", "population", "year", "season", "harvest", "site", "replication", "block", "row", "col"],
             filter = :table_query_entries_filter,
             template(
                 var"v-slot:top-right" = "",
