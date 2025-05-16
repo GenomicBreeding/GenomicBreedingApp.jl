@@ -540,8 +540,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         @out choices_plot_traits_scat_x::Vector{String} = names(df[2])[idx_col_start_numeric_pheno_tables:end]
         @in selected_plot_traits_scat_y::Vector{String} = [] # Y-axis trait  
         @out choices_plot_traits_scat_y::Vector{String} = names(df[2])[idx_col_start_numeric_pheno_tables:end]
-        @in selected_plot_groupings_scat::Vector{String} = ["name"]
-        @out choices_plot_groupings_scat::Vector{String} = names(df[2])
+        @in selected_plot_traits_scat_z::Vector{String} = ["name"]
+        @out choices_plot_traits_scat_z::Vector{String} = names(df[2])
 
         @in selected_plot_colour_scheme_scat = :seaborn_colorblind
         @out choices_plot_colour_scheme_scat = [:seaborn_colorblind, :tol_bright, :tol_light, :tol_muted, :okabe_ito, :mk_15]
@@ -574,8 +574,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             choices_plot_traits_scat_x = []
             selected_plot_traits_scat_y = []
             choices_plot_traits_scat_y = []
-            selected_plot_groupings_scat = []
-            choices_plot_groupings_scat = []
+            selected_plot_traits_scat_z = []
+            choices_plot_traits_scat_z = []
             selected_agg_func_per_season_scat_x = ["missing"]
             selected_agg_func_per_season_scat_y = ["missing"]
             df[2] = if selected_table_to_plot_scat == ["analyses"]
@@ -583,7 +583,6 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                     println("No data to plot")
                     return DataFrame()
                 else
-                    @show nrow(table_query_analyses.data)
                     if nrow(table_query_analyses.data) < 100_000
                         table_query_analyses.data
                     else
@@ -611,7 +610,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             else
                 names(df[2])[idx_col_start_numeric_pheno_tables:end]
             end
-            choices_plot_groupings_scat = names(df[2])
+            choices_plot_traits_scat_z = names(df[2])
         end
 
 
@@ -624,7 +623,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             df::Vector{DataFrame};
             selected_plot_traits_scat_x::Vector{String},
             selected_plot_traits_scat_y::Vector{String},
-            selected_plot_groupings_scat::Vector{String},
+            selected_plot_traits_scat_z::Vector{String},
             selected_agg_func_per_season_scat_x::Vector{String},
             selected_agg_func_per_season_scat_y::Vector{String},
             n_bins_plot_scat::Int64,
@@ -638,8 +637,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 df_agg = combine(
                     groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
                     [
+                        t => (x -> "misssing") => "harvest", 
                         t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
-                        t => (x -> "misssing") => "harvest"
                     ]
                 )
                 (df_agg, x_agg)
@@ -648,8 +647,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 df_agg = combine(
                     groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
                     [
+                        t => (x -> "misssing") => "harvest", 
                         t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
-                        t => (x -> "misssing") => "harvest"
                     ]
                 )
                 (df_agg, x_agg)
@@ -666,8 +665,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 df_agg = combine(
                     groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
                     [
+                        t => (x -> "misssing") => "harvest", 
                         t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
-                        t => (x -> "misssing") => "harvest"
                     ]
                 )
                 (df_agg, y_agg)
@@ -676,8 +675,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 df_agg = combine(
                     groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
                     [
+                        t => (x -> "misssing") => "harvest", 
                         t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
-                        t => (x -> "misssing") => "harvest"
                     ]
                 )
                 (df_agg, y_agg)
@@ -687,24 +686,89 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 rename!(df_agg, t => y_agg)
                 (df_agg, y_agg)
             end
-            x_agg, y_agg = if x_agg == y_agg
+            # Aggregate z
+            t = selected_plot_traits_scat_z[1]
+            df_agg_z, z_agg = if t ∈ names(df_agg_x)[1:(end-1)]
+                df_agg = df_agg_x[:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]]
+                z_agg = t
+                (df_agg, z_agg)
+            elseif (selected_agg_func_per_season_scat_x[1] != "missing") || (selected_agg_func_per_season_scat_y[1] != "missing")
+                z_agg = string(t, "_mean")
+                df_agg = combine(
+                    groupby(df[2], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+                    [
+                        t => (x -> "misssing") => "harvest", 
+                        t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => z_agg, 
+                    ]
+                )
+                (df_agg, z_agg)
+            else
+                z_agg = string(t, "_no_agg")
+                df_agg = df[2][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
+                rename!(df_agg, t => z_agg)
+                (df_agg, z_agg)
+            end
+            @show "!!!!Z!!!!"
+            @show t
+            @show z_agg
+            @show nrow(df_agg_z)
+            @show "!!!!!!!!!!!!!"            
+
+            x_agg, y_agg, z_agg = if x_agg == y_agg == z_agg
                 rename!(df_agg_x, x_agg => x_agg * "_1")
                 rename!(df_agg_y, y_agg => y_agg * "_2")
-                (x_agg * "_1", y_agg * "_2")
+                rename!(df_agg_z, z_agg => z_agg * "_3")
+                (x_agg * "_1", y_agg * "_2", z_agg * "_3")
+            elseif x_agg == y_agg != z_agg
+                rename!(df_agg_x, x_agg => x_agg * "_1")
+                rename!(df_agg_y, y_agg => y_agg * "_2")
+                (x_agg * "_1", y_agg * "_2", z_agg)
+            elseif x_agg != y_agg == z_agg
+                rename!(df_agg_y, y_agg => y_agg * "_1")
+                rename!(df_agg_z, z_agg => z_agg * "_2")
+                (x_agg, y_agg * "_1", z_agg * "_2")
+            elseif x_agg == z_agg != y_agg
+                rename!(df_agg_x, x_agg => x_agg * "_1")
+                rename!(df_agg_z, z_agg => z_agg * "_2")
+                (x_agg * "_1", y_agg, z_agg * "_2")
             else
-                (x_agg, y_agg)
+                (x_agg, y_agg, z_agg)
             end
             # Convert missing to "missing"
+            println("Set missing in df_agg_x and df_agg_y:")
+            @show nrow(df_agg_x)
+            @show nrow(df_agg_y)
+            @show nrow(df_agg_z)
             for i in 1:nrow(df_agg_x)
-                df_agg_x[:, 1:(end-1)] .= "missing"
-                df_agg_y[:, 1:(end-1)] .= "missing"
+                for j in 1:(ncol(df_agg_x)-1)
+                    if ismissing(df_agg_x[i, j])
+                        df_agg_x[i, j] = "missing"
+                    end
+                    if ismissing(df_agg_y[i, j])
+                        df_agg_y[i, j] = "missing"
+                    end
+                    if ismissing(df_agg_z[i, j])
+                        df_agg_z[i, j] = "missing"
+                    end
+                end
             end
             # Merge
-            df_agg = leftjoin(df_agg_x, df_agg_y, on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]);
+            println("Leftjoining")
+            df_agg = leftjoin(
+                df_agg_x,
+                leftjoin(
+                    df_agg_y, 
+                    df_agg_z, 
+                    on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]
+                ),
+                on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]
+            );
+            @show nrow(df_agg)
+
             # Extract x, y, and z values
             x = df_agg[!, x_agg]
             y = df_agg[!, y_agg]
-            z = df_agg[!, selected_plot_groupings_scat[1]]
+            z = df_agg[!, z_agg]
             # Set up color scheme for points
             z = begin
                 z_new = repeat(["missing"], length(z))
@@ -805,7 +869,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 xaxis_title=selected_plot_traits_scat_x[1],
                 yaxis_title=selected_plot_traits_scat_y[1],
                 showlegend=true,
-                legend=attr(title=attr(text=selected_plot_groupings_scat[1])),
+                legend=attr(title=attr(text=selected_plot_traits_scat_z[1])),
                 colorway=colours_per_unique_z,
             )
             # Update plot
@@ -823,7 +887,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 df,
                 selected_plot_traits_scat_x=selected_plot_traits_scat_x,
                 selected_plot_traits_scat_y=selected_plot_traits_scat_y,
-                selected_plot_groupings_scat=selected_plot_groupings_scat,
+                selected_plot_traits_scat_z=selected_plot_traits_scat_z,
                 selected_agg_func_per_season_scat_x=selected_agg_func_per_season_scat_x,
                 selected_agg_func_per_season_scat_y=selected_agg_func_per_season_scat_y,
                 n_bins_plot_scat=n_bins_plot_scat,
@@ -1684,7 +1748,7 @@ function uiplotscat()
             column(size=3, [Stipple.select(:selected_table_to_plot_scat, useinput=true, options = :choices_tables_to_plot_scat, label = "Table to plot"),]),
             column(size=3, [Stipple.select(:selected_plot_traits_scat_x, useinput=true, options = :choices_plot_traits_scat_x, label = "Trait x", multiple=false, usechips=false),]),
             column(size=3, [Stipple.select(:selected_plot_traits_scat_y, useinput=true, options = :choices_plot_traits_scat_y, label = "Trait y", multiple=false, usechips=false),]),
-            column(size=3, [Stipple.select(:selected_plot_groupings_scat, useinput=true, options = :choices_plot_groupings_scat, label = "Grouping", multiple=false, usechips=false),]),
+            column(size=3, [Stipple.select(:selected_plot_traits_scat_z, useinput=true, options = :choices_plot_traits_scat_z, label = "Grouping", multiple=false, usechips=false),]),
         ]),
         row([
             column(size=3, [Stipple.select(:selected_plot_colour_scheme_scat, useinput=true, options = :choices_plot_colour_scheme_scat, label = "Colour Scheme", multiple=false, usechips=false),]),
