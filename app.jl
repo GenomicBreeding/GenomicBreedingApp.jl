@@ -1005,13 +1005,13 @@ DotEnv.load!(joinpath(homedir(), ".env"))
 
 
         # PCA
-        A::Matrix{Float64} = Matrix(df[3][:, idx_col_start_numeric_pheno_tables:end])
-        A = (A .- mean(A, dims = 1)) ./ std(A, dims = 1)
-        # Remove traits with no variation
-        v = StatsBase.var(A, dims = 1)[1, :]
-        idx_cols = findall((abs.(v .- 1) .< 0.00001) .&& .!isnan.(v) .&& .!ismissing.(v) .&& .!isinf.(v))
-        A = A[:, idx_cols]
-        M = fit(PCA, A; maxoutdim = 2)
+        # A::Matrix{Float64} = Matrix(df[3][:, idx_col_start_numeric_pheno_tables:end])
+        # A = (A .- mean(A, dims = 1)) ./ std(A, dims = 1)
+        # # Remove traits with no variation
+        # v = StatsBase.var(A, dims = 1)[1, :]
+        # idx_cols = findall((abs.(v .- 1) .< 0.00001) .&& .!isnan.(v) .&& .!ismissing.(v) .&& .!isinf.(v))
+        # A = A[:, idx_cols]
+        # M = MultivariateStats.fit(MultivariateStats.PCA, A; maxoutdim = 2)
         # TODO: add PC selection
         @in selected_plot_traits_pca_x::Vector{String} = [] # X-axis trait
         @out choices_plot_traits_pca_x::Vector{String} = names(df[3])[idx_col_start_numeric_pheno_tables:end]
@@ -1030,348 +1030,348 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         
         # Create initial PCA biplot
         plots_vector_pca = []
-        x = M.proj[:, 1]
-        y = M.proj[:, 2]
+        df[3].PC1 = M.proj[:, 1]
+        df[3].PC2 = M.proj[:, 2]
         # Filter valid points
         idx = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isinf.(x) .&& .!isinf.(y))
         x = x[idx]
         y = y[idx]
-        plots_vector_scat = [PlotlyBase.scatter(x=x, y=y, mode="markers")]
-        plots_layout_scat = PlotlyBase.Layout()
-        @out plotdata_scat = plots_vector_scat
-        @out plotlayout_scat = plots_layout_scat
+        plots_vector_pca = [PlotlyBase.scatter(x=x, y=y, mode="markers")]
+        plots_layout_pca = PlotlyBase.Layout()
+        @out plotdata_pca = plots_vector_pca
+        @out plotlayout_pca = plots_layout_pca
 
 
 
 
         # When table selection changes, update trait choices
-        # @onchange selected_table_to_plot_scat begin
-        #     selected_plot_traits_scat_x = []
-        #     choices_plot_traits_scat_x = []
-        #     selected_plot_traits_scat_y = []
-        #     choices_plot_traits_scat_y = []
-        #     selected_plot_traits_scat_z = []
-        #     choices_plot_traits_scat_z = []
-        #     selected_agg_func_per_season_scat_x = ["missing"]
-        #     selected_agg_func_per_season_scat_y = ["missing"]
-        #     df[3] = if selected_table_to_plot_scat == ["analyses"]
-        #         if nrow(table_query_analyses.data) == 0
-        #             println("No data to plot")
-        #             return DataFrame()
-        #         else
-        #             if nrow(table_query_analyses.data) < 100_000
-        #                 table_query_analyses.data
-        #             else
-        #                 table_query_analyses.data
-        #             end
-        #         end
-        #     elseif selected_table_to_plot_scat == ["trials/entries"]
-        #         if nrow(table_query_entries.data) == 0
-        #             println("No data to plot")
-        #             return DataFrame()
-        #         else
-        #             table_query_entries.data
-        #         end
-        #     else
-        #         println("Unknown table selected")
-        #         return DataFrame()
-        #     end
-        #     choices_plot_traits_scat_x = if ncol(df[3]) == 0
-        #         ["missing"]
-        #     else
-        #         names(df[3])[idx_col_start_numeric_pheno_tables:end]
-        #     end
-        #     choices_plot_traits_scat_y = if ncol(df[3]) == 0
-        #         ["missing"]
-        #     else
-        #         names(df[3])[idx_col_start_numeric_pheno_tables:end]
-        #     end
-        #     choices_plot_traits_scat_z = names(df[3])
-        # end
+        @onchange selected_table_to_plot_pca begin
+            selected_plot_traits_pca_x = []
+            choices_plot_traits_pca_x = []
+            selected_plot_traits_pca_y = []
+            choices_plot_traits_pca_y = []
+            selected_plot_traits_pca_z = []
+            choices_plot_traits_pca_z = []
+            selected_agg_func_per_season_pca_x = ["missing"]
+            selected_agg_func_per_season_pca_y = ["missing"]
+            df[3] = if selected_table_to_plot_pca == ["analyses"]
+                if nrow(table_query_analyses.data) == 0
+                    println("No data to plot")
+                    return DataFrame()
+                else
+                    if nrow(table_query_analyses.data) < 100_000
+                        table_query_analyses.data
+                    else
+                        table_query_analyses.data
+                    end
+                end
+            elseif selected_table_to_plot_pca == ["trials/entries"]
+                if nrow(table_query_entries.data) == 0
+                    println("No data to plot")
+                    return DataFrame()
+                else
+                    table_query_entries.data
+                end
+            else
+                println("Unknown table selected")
+                return DataFrame()
+            end
+            choices_plot_traits_pca_x = if ncol(df[3]) == 0
+                ["missing"]
+            else
+                names(df[3])[idx_col_start_numeric_pheno_tables:end]
+            end
+            choices_plot_traits_pca_y = if ncol(df[3]) == 0
+                ["missing"]
+            else
+                names(df[3])[idx_col_start_numeric_pheno_tables:end]
+            end
+            choices_plot_traits_pca_z = names(df[3])
+        end
 
 
-        # # TODO: add option to aggregate the y-values per season, year, sites, etc..
+        # TODO: add option to aggregate the y-values per season, year, sites, etc..
 
-        # # TODO: (2/3) parameterise, add tests and docs + move to a separate file
+        # TODO: (2/3) parameterise, add tests and docs + move to a separate file
  
 
-        # function reactivescatter(
-        #     df::Vector{DataFrame};
-        #     selected_plot_traits_scat_x::Vector{String},
-        #     selected_plot_traits_scat_y::Vector{String},
-        #     selected_plot_traits_scat_z::Vector{String},
-        #     selected_agg_func_per_season_scat_x::Vector{String},
-        #     selected_agg_func_per_season_scat_y::Vector{String},
-        #     n_bins_plot_scat::Int64,
-        #     selected_plot_colour_scheme_scat::Symbol
-        # )::Dict{String, Any}
-        #     println("Plotting scatterplot")
-        #     # Aggregate x
-        #     t = selected_plot_traits_scat_x[1]
-        #     df_agg_x, x_agg = if selected_agg_func_per_season_scat_x[1] == "sum"
-        #         x_agg = string(t, "_sum")
-        #         df_agg = combine(
-        #             groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
-        #             [
-        #                 t => (x -> "misssing") => "harvest", 
-        #                 t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
-        #             ]
-        #         )
-        #         (df_agg, x_agg)
-        #     elseif selected_agg_func_per_season_scat_x[1] == "mean"
-        #         x_agg = string(t, "_mean")
-        #         df_agg = combine(
-        #             groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
-        #             [
-        #                 t => (x -> "misssing") => "harvest", 
-        #                 t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
-        #             ]
-        #         )
-        #         (df_agg, x_agg)
-        #     else
-        #         x_agg = string(t, "_no_agg")
-        #         df_agg = df[3][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
-        #         rename!(df_agg, t => x_agg)
-        #         (df_agg, x_agg)
-        #     end
-        #     # Aggregate y
-        #     t = selected_plot_traits_scat_y[1]
-        #     df_agg_y, y_agg = if (selected_agg_func_per_season_scat_y[1] == "sum") || ((selected_agg_func_per_season_scat_x[1] == "sum") && (selected_agg_func_per_season_scat_y[1] == "missing"))
-        #         y_agg = string(t, "_sum")
-        #         df_agg = combine(
-        #             groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
-        #             [
-        #                 t => (x -> "misssing") => "harvest", 
-        #                 t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
-        #             ]
-        #         )
-        #         (df_agg, y_agg)
-        #     elseif (selected_agg_func_per_season_scat_y[1] == "mean") || ((selected_agg_func_per_season_scat_x[1] == "mean") && (selected_agg_func_per_season_scat_y[1] == "missing"))
-        #         y_agg = string(t, "_mean")
-        #         df_agg = combine(
-        #             groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
-        #             [
-        #                 t => (x -> "misssing") => "harvest", 
-        #                 t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
-        #             ]
-        #         )
-        #         (df_agg, y_agg)
-        #     else
-        #         y_agg = string(t, "_no_agg")
-        #         df_agg = df[3][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
-        #         rename!(df_agg, t => y_agg)
-        #         (df_agg, y_agg)
-        #     end
-        #     # Aggregate z
-        #     t = selected_plot_traits_scat_z[1]
-        #     df_agg_z, z_agg = if t ∈ names(df_agg_x)[1:(end-1)]
-        #         df_agg = df_agg_x[:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]]
-        #         z_agg = t
-        #         (df_agg, z_agg)
-        #     elseif (selected_agg_func_per_season_scat_x[1] != "missing") || (selected_agg_func_per_season_scat_y[1] != "missing")
-        #         z_agg = string(t, "_mean")
-        #         df_agg = combine(
-        #             groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
-        #             [
-        #                 t => (x -> "misssing") => "harvest", 
-        #                 t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => z_agg, 
-        #             ]
-        #         )
-        #         (df_agg, z_agg)
-        #     else
-        #         z_agg = string(t, "_no_agg")
-        #         df_agg = df[3][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
-        #         rename!(df_agg, t => z_agg)
-        #         (df_agg, z_agg)
-        #     end
-        #     @show "!!!!Z!!!!"
-        #     @show t
-        #     @show z_agg
-        #     @show nrow(df_agg_z)
-        #     @show "!!!!!!!!!!!!!"            
+        function reactivepcbiplot(
+            df::Vector{DataFrame};
+            selected_plot_traits_pca_x::Vector{String} = ["PC1"],
+            selected_plot_traits_pca_y::Vector{String} = ["PC2"],
+            selected_plot_traits_pca_z::Vector{String},
+            selected_agg_func_per_season_pca_x::Vector{String},
+            selected_agg_func_per_season_pca_y::Vector{String},
+            n_bins_plot_pca::Int64,
+            selected_plot_colour_scheme_pca::Symbol
+        )::Dict{String, Any}
+            println("Plotting scatterplot")
+            # Aggregate x
+            t = selected_plot_traits_pca_x[1]
+            df_agg_x, x_agg = if selected_agg_func_per_season_pca_x[1] == "sum"
+                x_agg = string(t, "_sum")
+                df_agg = combine(
+                    groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+                    [
+                        t => (x -> "misssing") => "harvest", 
+                        t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
+                    ]
+                )
+                (df_agg, x_agg)
+            elseif selected_agg_func_per_season_pca_x[1] == "mean"
+                x_agg = string(t, "_mean")
+                df_agg = combine(
+                    groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+                    [
+                        t => (x -> "misssing") => "harvest", 
+                        t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
+                    ]
+                )
+                (df_agg, x_agg)
+            else
+                x_agg = string(t, "_no_agg")
+                df_agg = df[3][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
+                rename!(df_agg, t => x_agg)
+                (df_agg, x_agg)
+            end
+            # Aggregate y
+            t = selected_plot_traits_pca_y[1]
+            df_agg_y, y_agg = if (selected_agg_func_per_season_pca_y[1] == "sum") || ((selected_agg_func_per_season_pca_x[1] == "sum") && (selected_agg_func_per_season_pca_y[1] == "missing"))
+                y_agg = string(t, "_sum")
+                df_agg = combine(
+                    groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+                    [
+                        t => (x -> "misssing") => "harvest", 
+                        t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
+                    ]
+                )
+                (df_agg, y_agg)
+            elseif (selected_agg_func_per_season_pca_y[1] == "mean") || ((selected_agg_func_per_season_pca_x[1] == "mean") && (selected_agg_func_per_season_pca_y[1] == "missing"))
+                y_agg = string(t, "_mean")
+                df_agg = combine(
+                    groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+                    [
+                        t => (x -> "misssing") => "harvest", 
+                        t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
+                    ]
+                )
+                (df_agg, y_agg)
+            else
+                y_agg = string(t, "_no_agg")
+                df_agg = df[3][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
+                rename!(df_agg, t => y_agg)
+                (df_agg, y_agg)
+            end
+            # Aggregate z
+            t = selected_plot_traits_pca_z[1]
+            df_agg_z, z_agg = if t ∈ names(df_agg_x)[1:(end-1)]
+                df_agg = df_agg_x[:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]]
+                z_agg = t
+                (df_agg, z_agg)
+            elseif (selected_agg_func_per_season_pca_x[1] != "missing") || (selected_agg_func_per_season_pca_y[1] != "missing")
+                z_agg = string(t, "_mean")
+                df_agg = combine(
+                    groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+                    [
+                        t => (x -> "misssing") => "harvest", 
+                        t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => z_agg, 
+                    ]
+                )
+                (df_agg, z_agg)
+            else
+                z_agg = string(t, "_no_agg")
+                df_agg = df[3][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
+                rename!(df_agg, t => z_agg)
+                (df_agg, z_agg)
+            end
+            @show "!!!!Z!!!!"
+            @show t
+            @show z_agg
+            @show nrow(df_agg_z)
+            @show "!!!!!!!!!!!!!"            
 
-        #     x_agg, y_agg, z_agg = if x_agg == y_agg == z_agg
-        #         rename!(df_agg_x, x_agg => x_agg * "_1")
-        #         rename!(df_agg_y, y_agg => y_agg * "_2")
-        #         rename!(df_agg_z, z_agg => z_agg * "_3")
-        #         (x_agg * "_1", y_agg * "_2", z_agg * "_3")
-        #     elseif x_agg == y_agg != z_agg
-        #         rename!(df_agg_x, x_agg => x_agg * "_1")
-        #         rename!(df_agg_y, y_agg => y_agg * "_2")
-        #         (x_agg * "_1", y_agg * "_2", z_agg)
-        #     elseif x_agg != y_agg == z_agg
-        #         rename!(df_agg_y, y_agg => y_agg * "_1")
-        #         rename!(df_agg_z, z_agg => z_agg * "_2")
-        #         (x_agg, y_agg * "_1", z_agg * "_2")
-        #     elseif x_agg == z_agg != y_agg
-        #         rename!(df_agg_x, x_agg => x_agg * "_1")
-        #         rename!(df_agg_z, z_agg => z_agg * "_2")
-        #         (x_agg * "_1", y_agg, z_agg * "_2")
-        #     else
-        #         (x_agg, y_agg, z_agg)
-        #     end
-        #     # Convert missing to "missing"
-        #     println("Set missing in df_agg_x and df_agg_y:")
-        #     @show nrow(df_agg_x)
-        #     @show nrow(df_agg_y)
-        #     @show nrow(df_agg_z)
-        #     for i in 1:nrow(df_agg_x)
-        #         for j in 1:(ncol(df_agg_x)-1)
-        #             if ismissing(df_agg_x[i, j])
-        #                 df_agg_x[i, j] = "missing"
-        #             end
-        #             if ismissing(df_agg_y[i, j])
-        #                 df_agg_y[i, j] = "missing"
-        #             end
-        #             if ismissing(df_agg_z[i, j])
-        #                 df_agg_z[i, j] = "missing"
-        #             end
-        #         end
-        #     end
-        #     # Merge
-        #     println("Leftjoining")
-        #     df_agg = leftjoin(
-        #         df_agg_x,
-        #         leftjoin(
-        #             df_agg_y, 
-        #             df_agg_z, 
-        #             on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]
-        #         ),
-        #         on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]
-        #     );
-        #     @show nrow(df_agg)
+            x_agg, y_agg, z_agg = if x_agg == y_agg == z_agg
+                rename!(df_agg_x, x_agg => x_agg * "_1")
+                rename!(df_agg_y, y_agg => y_agg * "_2")
+                rename!(df_agg_z, z_agg => z_agg * "_3")
+                (x_agg * "_1", y_agg * "_2", z_agg * "_3")
+            elseif x_agg == y_agg != z_agg
+                rename!(df_agg_x, x_agg => x_agg * "_1")
+                rename!(df_agg_y, y_agg => y_agg * "_2")
+                (x_agg * "_1", y_agg * "_2", z_agg)
+            elseif x_agg != y_agg == z_agg
+                rename!(df_agg_y, y_agg => y_agg * "_1")
+                rename!(df_agg_z, z_agg => z_agg * "_2")
+                (x_agg, y_agg * "_1", z_agg * "_2")
+            elseif x_agg == z_agg != y_agg
+                rename!(df_agg_x, x_agg => x_agg * "_1")
+                rename!(df_agg_z, z_agg => z_agg * "_2")
+                (x_agg * "_1", y_agg, z_agg * "_2")
+            else
+                (x_agg, y_agg, z_agg)
+            end
+            # Convert missing to "missing"
+            println("Set missing in df_agg_x and df_agg_y:")
+            @show nrow(df_agg_x)
+            @show nrow(df_agg_y)
+            @show nrow(df_agg_z)
+            for i in 1:nrow(df_agg_x)
+                for j in 1:(ncol(df_agg_x)-1)
+                    if ismissing(df_agg_x[i, j])
+                        df_agg_x[i, j] = "missing"
+                    end
+                    if ismissing(df_agg_y[i, j])
+                        df_agg_y[i, j] = "missing"
+                    end
+                    if ismissing(df_agg_z[i, j])
+                        df_agg_z[i, j] = "missing"
+                    end
+                end
+            end
+            # Merge
+            println("Leftjoining")
+            df_agg = leftjoin(
+                df_agg_x,
+                leftjoin(
+                    df_agg_y, 
+                    df_agg_z, 
+                    on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]
+                ),
+                on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]
+            );
+            @show nrow(df_agg)
 
-        #     # Extract x, y, and z values
-        #     x = df_agg[!, x_agg]
-        #     y = df_agg[!, y_agg]
-        #     z = df_agg[!, z_agg]
-        #     # Set up color scheme for points
-        #     z = begin
-        #         z_new = repeat(["missing"], length(z))
-        #         idx = findall(.!ismissing.(z))
-        #         if (length(idx) > 0) && !isa(z[idx[1]], String) 
-        #             idx = findall(.!ismissing.(z) .&& .!isnan.(z) .&& .!isinf.(z))
-        #             n = if n_bins_plot_scat > length(z)
-        #                 length(z)
-        #             else
-        #                 n_bins_plot_scat
-        #             end
-        #             unique_z = percentile(
-        #                 filter(z -> !ismissing(z) && !isnan(z) && !isinf(z), z), 
-        #                 100 .* collect(0:1/n:1)
-        #             )
-        #             m1 = length(split(string(maximum(round.(unique_z))), ".")[1])
-        #             m2 = 4
-        #             for (j, z_level) in enumerate(unique_z)
-        #                 if j == 1
-        #                     continue
-        #                 end
-        #                 idx_sub = if j == 2
-        #                     # include the minimum
-        #                     filter(i -> (z[i] >= unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
-        #                 else
-        #                     filter(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
-        #                 end
-        #                 ini = begin
-        #                     ini = string((round(unique_z[j-1], digits=4)))
-        #                     join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
-        #                 end
-        #                 fin = begin
-        #                     fin = string((round(unique_z[j], digits=4)))
-        #                     join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
-        #                 end
-        #                 z_new[idx_sub] .= string(ini, " - ", fin)
-        #             end
-        #         else
-        #             z_new[idx] = z[idx]
-        #         end
-        #         z_new
-        #     end
-        #     # Map colours to points
-        #     unique_z = sort(unique(z))
-        #     colours_per_unique_z = try
-        #         colorschemes[selected_plot_colour_scheme_scat][1:length(unique_z)]
-        #     catch
-        #         repeat(
-        #             colorschemes[selected_plot_colour_scheme_scat][1:end], 
-        #             outer=Int(ceil(length(unique_z)/length(colorschemes[selected_plot_colour_scheme_scat])))
-        #         )[1:length(unique_z)]
-        #     end
-        #     # colours = [colours_per_unique_z[unique_z .== zi][1] for zi in z]
-        #     # Create hover text for each point
-        #     hovertext = [
-        #         join(
-        #             filter(x -> !isnothing(x) && split(x, ": ")[end] != "missing", [
-        #                 # Trials and phenomes
-        #                 "name" ∈ names(df_agg) ? string("name: ", df_agg.name[i]) : nothing,
-        #                 "population" ∈ names(df_agg) ? string("population: ", df_agg.population[i]) : nothing,
-        #                 "year" ∈ names(df_agg) ? string("year: ", df_agg.year[i]) : nothing,
-        #                 "season" ∈ names(df_agg) ? string("season: ", df_agg.season[i]) : nothing,
-        #                 "site" ∈ names(df_agg) ? string("site: ", df_agg.site[i]) : nothing,
-        #                 "harvest" ∈ names(df_agg) ? string("harvest: ", df_agg.harvest[i]) : nothing,
-        #                 "replication" ∈ names(df_agg) ? string("replication: ", df_agg.replication[i]) : nothing,
-        #                 "block" ∈ names(df_agg) ? string("block: ", df_agg.block[i]) : nothing,
-        #                 "row" ∈ names(df_agg) ? string("row: ", df_agg.row[i]) : nothing,
-        #                 "column" ∈ names(df_agg) ? string("column: ", df_agg.column[i]) : nothing,
-        #                 # CVs
-        #                 "fold" ∈ names(df_agg) ? string("fold: ", df_agg.fold[i]) : nothing,
-        #                 string(selected_plot_traits_scat_x[1], ": ", round(x[i], digits=4)),
-        #                 string(selected_plot_traits_scat_y[1], ": ", round(y[i], digits=4))
-        #             ]), "<br>"
-        #         ) for i in 1:length(x)
-        #     ]
+            # Extract x, y, and z values
+            x = df_agg[!, x_agg]
+            y = df_agg[!, y_agg]
+            z = df_agg[!, z_agg]
+            # Set up color scheme for points
+            z = begin
+                z_new = repeat(["missing"], length(z))
+                idx = findall(.!ismissing.(z))
+                if (length(idx) > 0) && !isa(z[idx[1]], String) 
+                    idx = findall(.!ismissing.(z) .&& .!isnan.(z) .&& .!isinf.(z))
+                    n = if n_bins_plot_pca > length(z)
+                        length(z)
+                    else
+                        n_bins_plot_pca
+                    end
+                    unique_z = percentile(
+                        filter(z -> !ismissing(z) && !isnan(z) && !isinf(z), z), 
+                        100 .* collect(0:1/n:1)
+                    )
+                    m1 = length(split(string(maximum(round.(unique_z))), ".")[1])
+                    m2 = 4
+                    for (j, z_level) in enumerate(unique_z)
+                        if j == 1
+                            continue
+                        end
+                        idx_sub = if j == 2
+                            # include the minimum
+                            filter(i -> (z[i] >= unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+                        else
+                            filter(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+                        end
+                        ini = begin
+                            ini = string((round(unique_z[j-1], digits=4)))
+                            join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
+                        end
+                        fin = begin
+                            fin = string((round(unique_z[j], digits=4)))
+                            join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
+                        end
+                        z_new[idx_sub] .= string(ini, " - ", fin)
+                    end
+                else
+                    z_new[idx] = z[idx]
+                end
+                z_new
+            end
+            # Map colours to points
+            unique_z = sort(unique(z))
+            colours_per_unique_z = try
+                colorschemes[selected_plot_colour_scheme_pca][1:length(unique_z)]
+            catch
+                repeat(
+                    colorschemes[selected_plot_colour_scheme_pca][1:end], 
+                    outer=Int(ceil(length(unique_z)/length(colorschemes[selected_plot_colour_scheme_pca])))
+                )[1:length(unique_z)]
+            end
+            # colours = [colours_per_unique_z[unique_z .== zi][1] for zi in z]
+            # Create hover text for each point
+            hovertext = [
+                join(
+                    filter(x -> !isnothing(x) && split(x, ": ")[end] != "missing", [
+                        # Trials and phenomes
+                        "name" ∈ names(df_agg) ? string("name: ", df_agg.name[i]) : nothing,
+                        "population" ∈ names(df_agg) ? string("population: ", df_agg.population[i]) : nothing,
+                        "year" ∈ names(df_agg) ? string("year: ", df_agg.year[i]) : nothing,
+                        "season" ∈ names(df_agg) ? string("season: ", df_agg.season[i]) : nothing,
+                        "site" ∈ names(df_agg) ? string("site: ", df_agg.site[i]) : nothing,
+                        "harvest" ∈ names(df_agg) ? string("harvest: ", df_agg.harvest[i]) : nothing,
+                        "replication" ∈ names(df_agg) ? string("replication: ", df_agg.replication[i]) : nothing,
+                        "block" ∈ names(df_agg) ? string("block: ", df_agg.block[i]) : nothing,
+                        "row" ∈ names(df_agg) ? string("row: ", df_agg.row[i]) : nothing,
+                        "column" ∈ names(df_agg) ? string("column: ", df_agg.column[i]) : nothing,
+                        # CVs
+                        "fold" ∈ names(df_agg) ? string("fold: ", df_agg.fold[i]) : nothing,
+                        string(selected_plot_traits_pca_x[1], ": ", round(x[i], digits=4)),
+                        string(selected_plot_traits_pca_y[1], ": ", round(y[i], digits=4))
+                    ]), "<br>"
+                ) for i in 1:length(x)
+            ]
 
-        #     # Create scatter plot for each group
-        #     plots_vector_scat = []
-        #     for (j, g) in enumerate(unique_z)
-        #         group_indices = filter(i -> z[i] == g, idx)
-        #         push!(plots_vector_scat, 
-        #             scatter(
-        #                 x=x[group_indices], 
-        #                 y=y[group_indices], 
-        #                 mode="markers", 
-        #                 opacity=0.75,
-        #                 hoverinfo="text", 
-        #                 hovertext=hovertext[group_indices],
-        #                 # marker=attr(color=colours[group_indices]), 
-        #                 name=g
-        #             )
-        #         )
-        #     end
+            # Create scatter plot for each group
+            plots_vector_pca = []
+            for (j, g) in enumerate(unique_z)
+                group_indices = filter(i -> z[i] == g, idx)
+                push!(plots_vector_pca, 
+                    scatter(
+                        x=x[group_indices], 
+                        y=y[group_indices], 
+                        mode="markers", 
+                        opacity=0.75,
+                        hoverinfo="text", 
+                        hovertext=hovertext[group_indices],
+                        # marker=attr(color=colours[group_indices]), 
+                        name=g
+                    )
+                )
+            end
 
-        #     # Set plot layout
-        #     plots_layout_scat = PlotlyBase.Layout(
-        #         title=string("Scatterplot of ", selected_plot_traits_scat_x[1], " vs ", selected_plot_traits_scat_y[1]),
-        #         xaxis_title=selected_plot_traits_scat_x[1],
-        #         yaxis_title=selected_plot_traits_scat_y[1],
-        #         showlegend=true,
-        #         legend=attr(title=attr(text=selected_plot_traits_scat_z[1])),
-        #         colorway=colours_per_unique_z,
-        #     )
-        #     # Update plot
-        #     Dict(
-        #         "plotdata_scat" => plots_vector_scat,
-        #         "plotlayout_scat" => plots_layout_scat,
-        #     )
-        # end
+            # Set plot layout
+            plots_layout_pca = PlotlyBase.Layout(
+                title=string("Scatterplot of ", selected_plot_traits_pca_x[1], " vs ", selected_plot_traits_pca_y[1]),
+                xaxis_title=selected_plot_traits_pca_x[1],
+                yaxis_title=selected_plot_traits_pca_y[1],
+                showlegend=true,
+                legend=attr(title=attr(text=selected_plot_traits_pca_z[1])),
+                colorway=colours_per_unique_z,
+            )
+            # Update plot
+            Dict(
+                "plotdata_pca" => plots_vector_pca,
+                "plotlayout_pca" => plots_layout_pca,
+            )
+        end
 
 
-        # # When plot button clicked, create scatter plot
-        # @in plot_table_scat = false
-        # @onbutton plot_table_scat begin
-        #     p = reactivescatter(
-        #         df,
-        #         selected_plot_traits_scat_x=selected_plot_traits_scat_x,
-        #         selected_plot_traits_scat_y=selected_plot_traits_scat_y,
-        #         selected_plot_traits_scat_z=selected_plot_traits_scat_z,
-        #         selected_agg_func_per_season_scat_x=selected_agg_func_per_season_scat_x,
-        #         selected_agg_func_per_season_scat_y=selected_agg_func_per_season_scat_y,
-        #         n_bins_plot_scat=n_bins_plot_scat,
-        #         selected_plot_colour_scheme_scat=selected_plot_colour_scheme_scat,
-        #     )
-        #     plotdata_scat = p["plotdata_scat"]
-        #     plotlayout_scat = p["plotlayout_scat"]
-        # end
+        # When plot button clicked, create scatter plot
+        @in plot_table_pca = false
+        @onbutton plot_table_pca begin
+            p = reactivepcbiplot(
+                df,
+                selected_plot_traits_pca_x=["PC1"],
+                selected_plot_traits_pca_y=["PC2"],
+                selected_plot_traits_pca_z=selected_plot_traits_pca_z,
+                selected_agg_func_per_season_pca_x=selected_agg_func_per_season_pca_x,
+                selected_agg_func_per_season_pca_y=selected_agg_func_per_season_pca_y,
+                n_bins_plot_pca=n_bins_plot_pca,
+                selected_plot_colour_scheme_pca=selected_plot_colour_scheme_pca,
+            )
+            plotdata_pca = p["plotdata_pca"]
+            plotlayout_pca = p["plotlayout_pca"]
+        end
 
     #####################################################
     # Box plot functionality
