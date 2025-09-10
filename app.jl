@@ -1,6 +1,6 @@
 module GenomicBreedingApp
 
-using StatsBase, DataFrames, Tables, CSV, StippleDownloads
+using StatsBase, MultivariateStats, DataFrames, Tables, CSV, StippleDownloads
 using PlotlyBase, ColorSchemes
 using GenieFramework
 using GenomicBreedingCore, GenomicBreedingIO
@@ -208,7 +208,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         end
     end
     # Entries
-    entries_list = df_entries.name
+    entries_list = sort(unique(df_entries.name))
     @in entries_filter_text = ""             # Input from the text field
     @in entries_selected_options::Union{Nothing, Vector{String}} = nothing
     @in entries_filtered_options = entries_list   # Output/state: starts with all options
@@ -324,6 +324,30 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             cols_filtered_options = filter(opt -> occursin(search_term, lowercase(opt)), cols_list)
         end
     end
+
+     # Clear all filters
+    @in query_entries_clear_all_filters = false
+    @onbutton query_entries_clear_all_filters begin
+        traits_selected_options = nothing
+        species_selected_options = nothing
+        ploidies_selected_options = nothing
+        crop_durations_selected_options = nothing
+        individuals_or_pools_selected_options = nothing
+        populations_selected_options = nothing
+        maternal_families_selected_options = nothing
+        paternal_families_selected_options = nothing
+        cultivars_selected_options = nothing
+        entries_selected_options = nothing
+        years_selected_options = nothing
+        seasons_selected_options = nothing
+        harvests_selected_options = nothing
+        sites_selected_options = nothing
+        replications_selected_options = nothing
+        blocks_selected_options = nothing
+        rows_selected_options = nothing
+        cols_selected_options = nothing
+    end
+
     # Query
     @in phenotype_data = "yes"
     @in genotype_data = "no" # TODO: use when genotype data tables have been added
@@ -383,6 +407,79 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             println("No genotype data requested")
         end
     end
+    @in query_entries_select_all_traits = false
+    @onbutton query_entries_select_all_traits begin
+        traits_selected_options = traits_list
+    end
+    @in query_entries_select_all_entries = false
+    @onbutton query_entries_select_all_entries begin
+        entries_selected_options = entries_list
+    end
+    @in query_entries_select_all_populations = false
+    @onbutton query_entries_select_all_populations begin
+        populations_selected_options = populations_list
+    end
+    @in query_entries_select_all_individuals_or_pools = false
+    @onbutton query_entries_select_all_individuals_or_pools begin
+        individuals_or_pools_selected_options = individuals_or_pools_list
+    end
+    @in query_entries_select_all_species = false
+    @onbutton query_entries_select_all_species begin
+        species_selected_options = species_list
+    end
+    @in query_entries_select_all_ploidies = false
+    @onbutton query_entries_select_all_ploidies begin
+        ploidies_selected_options = ploidies_list
+    end
+    @in query_entries_select_all_crop_durations = false
+    @onbutton query_entries_select_all_crop_durations begin
+        crop_durations_selected_options = crop_durations_list
+    end
+    @in query_entries_select_all_maternal_families = false
+    @onbutton query_entries_select_all_maternal_families begin
+        maternal_families_selected_options = maternal_families_list
+    end
+    @in query_entries_select_all_paternal_families = false
+    @onbutton query_entries_select_all_paternal_families begin
+        paternal_families_selected_options = paternal_families_list
+    end
+    @in query_entries_select_all_cultivars = false
+    @onbutton query_entries_select_all_cultivars begin
+        cultivars_selected_options = cultivars_list
+    end
+    @in query_entries_select_all_years = false
+    @onbutton query_entries_select_all_years begin
+        years_selected_options = years_list
+    end
+    @in query_entries_select_all_seasons = false
+    @onbutton query_entries_select_all_seasons begin
+        seasons_selected_options = seasons_list
+    end
+    @in query_entries_select_all_harvests = false
+    @onbutton query_entries_select_all_harvests begin
+        harvests_selected_options = harvests_list
+    end
+    @in query_entries_select_all_sites = false
+    @onbutton query_entries_select_all_sites begin
+        sites_selected_options = sites_list
+    end
+    @in query_entries_select_all_replications = false
+    @onbutton query_entries_select_all_replications begin
+        replications_selected_options = replications_list
+    end
+    @in query_entries_select_all_blocks = false
+    @onbutton query_entries_select_all_blocks begin
+        blocks_selected_options = blocks_list
+    end
+    @in query_entries_select_all_rows = false
+    @onbutton query_entries_select_all_rows begin
+        rows_selected_options = rows_list
+    end
+    @in query_entries_select_all_cols = false
+    @onbutton query_entries_select_all_cols begin
+        cols_selected_options = cols_list
+    end
+    
     @event download_entries begin
         download_binary(__model__, df_to_io(table_query_entries.data), "entries_data.txt", )
     end
@@ -392,6 +489,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
     # Initialize three DataFrames (one for each plot type) with some initial data
     df = [
         queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true),
+        queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true), 
         queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true), 
         queryanalyses(analyses=[querytable("analyses").name[1]], verbose=true),
     ]
@@ -898,6 +996,384 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         end
 
     #####################################################
+    # PCA biplot functionality 
+    #####################################################
+
+        # Define reactive inputs for PCA biplot
+        @in selected_table_to_plot_pca::Vector{String} = ["analyses"]
+        @out choices_tables_to_plot_pca::Vector{String} = ["analyses", "trials/entries"]
+
+
+        # PCA
+        A::Matrix{Float64} = Matrix(df[3][:, idx_col_start_numeric_pheno_tables:end])
+        A = (A .- mean(A, dims = 1)) ./ std(A, dims = 1)
+        # Remove traits with no variation
+        v = StatsBase.var(A, dims = 1)[1, :]
+        idx_cols = findall((abs.(v .- 1) .< 0.00001) .&& .!isnan.(v) .&& .!ismissing.(v) .&& .!isinf.(v))
+        A = A[:, idx_cols]
+        M = fit(PCA, A; maxoutdim = 2)
+        # TODO: add PC selection
+        @in selected_plot_traits_pca_x::Vector{String} = [] # X-axis trait
+        @out choices_plot_traits_pca_x::Vector{String} = names(df[3])[idx_col_start_numeric_pheno_tables:end]
+        @in selected_plot_traits_pca_y::Vector{String} = [] # Y-axis trait  
+        @out choices_plot_traits_pca_y::Vector{String} = names(df[3])[idx_col_start_numeric_pheno_tables:end]
+
+
+        @in selected_plot_traits_pca_z::Vector{String} = ["name"]
+        @out choices_plot_traits_pca_z::Vector{String} = names(df[3])
+
+        @in selected_plot_colour_scheme_pca = :seaborn_colorblind
+        @out choices_plot_colour_scheme_pca = [:seaborn_colorblind, :tol_bright, :tol_light, :tol_muted, :okabe_ito, :mk_15]
+        @in n_bins_plot_pca = 5
+
+
+        
+        # Create initial PCA biplot
+        plots_vector_pca = []
+        x = M.proj[:, 1]
+        y = M.proj[:, 2]
+        # Filter valid points
+        idx = findall(.!ismissing.(x) .&& .!ismissing.(y) .&& .!isnan.(x) .&& .!isnan.(y) .&& .!isinf.(x) .&& .!isinf.(y))
+        x = x[idx]
+        y = y[idx]
+        plots_vector_scat = [PlotlyBase.scatter(x=x, y=y, mode="markers")]
+        plots_layout_scat = PlotlyBase.Layout()
+        @out plotdata_scat = plots_vector_scat
+        @out plotlayout_scat = plots_layout_scat
+
+
+
+
+        # When table selection changes, update trait choices
+        # @onchange selected_table_to_plot_scat begin
+        #     selected_plot_traits_scat_x = []
+        #     choices_plot_traits_scat_x = []
+        #     selected_plot_traits_scat_y = []
+        #     choices_plot_traits_scat_y = []
+        #     selected_plot_traits_scat_z = []
+        #     choices_plot_traits_scat_z = []
+        #     selected_agg_func_per_season_scat_x = ["missing"]
+        #     selected_agg_func_per_season_scat_y = ["missing"]
+        #     df[3] = if selected_table_to_plot_scat == ["analyses"]
+        #         if nrow(table_query_analyses.data) == 0
+        #             println("No data to plot")
+        #             return DataFrame()
+        #         else
+        #             if nrow(table_query_analyses.data) < 100_000
+        #                 table_query_analyses.data
+        #             else
+        #                 table_query_analyses.data
+        #             end
+        #         end
+        #     elseif selected_table_to_plot_scat == ["trials/entries"]
+        #         if nrow(table_query_entries.data) == 0
+        #             println("No data to plot")
+        #             return DataFrame()
+        #         else
+        #             table_query_entries.data
+        #         end
+        #     else
+        #         println("Unknown table selected")
+        #         return DataFrame()
+        #     end
+        #     choices_plot_traits_scat_x = if ncol(df[3]) == 0
+        #         ["missing"]
+        #     else
+        #         names(df[3])[idx_col_start_numeric_pheno_tables:end]
+        #     end
+        #     choices_plot_traits_scat_y = if ncol(df[3]) == 0
+        #         ["missing"]
+        #     else
+        #         names(df[3])[idx_col_start_numeric_pheno_tables:end]
+        #     end
+        #     choices_plot_traits_scat_z = names(df[3])
+        # end
+
+
+        # # TODO: add option to aggregate the y-values per season, year, sites, etc..
+
+        # # TODO: (2/3) parameterise, add tests and docs + move to a separate file
+ 
+
+        # function reactivescatter(
+        #     df::Vector{DataFrame};
+        #     selected_plot_traits_scat_x::Vector{String},
+        #     selected_plot_traits_scat_y::Vector{String},
+        #     selected_plot_traits_scat_z::Vector{String},
+        #     selected_agg_func_per_season_scat_x::Vector{String},
+        #     selected_agg_func_per_season_scat_y::Vector{String},
+        #     n_bins_plot_scat::Int64,
+        #     selected_plot_colour_scheme_scat::Symbol
+        # )::Dict{String, Any}
+        #     println("Plotting scatterplot")
+        #     # Aggregate x
+        #     t = selected_plot_traits_scat_x[1]
+        #     df_agg_x, x_agg = if selected_agg_func_per_season_scat_x[1] == "sum"
+        #         x_agg = string(t, "_sum")
+        #         df_agg = combine(
+        #             groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+        #             [
+        #                 t => (x -> "misssing") => "harvest", 
+        #                 t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
+        #             ]
+        #         )
+        #         (df_agg, x_agg)
+        #     elseif selected_agg_func_per_season_scat_x[1] == "mean"
+        #         x_agg = string(t, "_mean")
+        #         df_agg = combine(
+        #             groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+        #             [
+        #                 t => (x -> "misssing") => "harvest", 
+        #                 t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => x_agg, 
+        #             ]
+        #         )
+        #         (df_agg, x_agg)
+        #     else
+        #         x_agg = string(t, "_no_agg")
+        #         df_agg = df[3][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
+        #         rename!(df_agg, t => x_agg)
+        #         (df_agg, x_agg)
+        #     end
+        #     # Aggregate y
+        #     t = selected_plot_traits_scat_y[1]
+        #     df_agg_y, y_agg = if (selected_agg_func_per_season_scat_y[1] == "sum") || ((selected_agg_func_per_season_scat_x[1] == "sum") && (selected_agg_func_per_season_scat_y[1] == "missing"))
+        #         y_agg = string(t, "_sum")
+        #         df_agg = combine(
+        #             groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+        #             [
+        #                 t => (x -> "misssing") => "harvest", 
+        #                 t => (x -> sum(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
+        #             ]
+        #         )
+        #         (df_agg, y_agg)
+        #     elseif (selected_agg_func_per_season_scat_y[1] == "mean") || ((selected_agg_func_per_season_scat_x[1] == "mean") && (selected_agg_func_per_season_scat_y[1] == "missing"))
+        #         y_agg = string(t, "_mean")
+        #         df_agg = combine(
+        #             groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+        #             [
+        #                 t => (x -> "misssing") => "harvest", 
+        #                 t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => y_agg, 
+        #             ]
+        #         )
+        #         (df_agg, y_agg)
+        #     else
+        #         y_agg = string(t, "_no_agg")
+        #         df_agg = df[3][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
+        #         rename!(df_agg, t => y_agg)
+        #         (df_agg, y_agg)
+        #     end
+        #     # Aggregate z
+        #     t = selected_plot_traits_scat_z[1]
+        #     df_agg_z, z_agg = if t ∈ names(df_agg_x)[1:(end-1)]
+        #         df_agg = df_agg_x[:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]]
+        #         z_agg = t
+        #         (df_agg, z_agg)
+        #     elseif (selected_agg_func_per_season_scat_x[1] != "missing") || (selected_agg_func_per_season_scat_y[1] != "missing")
+        #         z_agg = string(t, "_mean")
+        #         df_agg = combine(
+        #             groupby(df[3], [:year, :season, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]), 
+        #             [
+        #                 t => (x -> "misssing") => "harvest", 
+        #                 t => (x -> mean(x[.!ismissing.(x) .&& .!isnan.(x) .&& .!isinf.(x)])) => z_agg, 
+        #             ]
+        #         )
+        #         (df_agg, z_agg)
+        #     else
+        #         z_agg = string(t, "_no_agg")
+        #         df_agg = df[3][:, [:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population, Symbol(t)]]
+        #         rename!(df_agg, t => z_agg)
+        #         (df_agg, z_agg)
+        #     end
+        #     @show "!!!!Z!!!!"
+        #     @show t
+        #     @show z_agg
+        #     @show nrow(df_agg_z)
+        #     @show "!!!!!!!!!!!!!"            
+
+        #     x_agg, y_agg, z_agg = if x_agg == y_agg == z_agg
+        #         rename!(df_agg_x, x_agg => x_agg * "_1")
+        #         rename!(df_agg_y, y_agg => y_agg * "_2")
+        #         rename!(df_agg_z, z_agg => z_agg * "_3")
+        #         (x_agg * "_1", y_agg * "_2", z_agg * "_3")
+        #     elseif x_agg == y_agg != z_agg
+        #         rename!(df_agg_x, x_agg => x_agg * "_1")
+        #         rename!(df_agg_y, y_agg => y_agg * "_2")
+        #         (x_agg * "_1", y_agg * "_2", z_agg)
+        #     elseif x_agg != y_agg == z_agg
+        #         rename!(df_agg_y, y_agg => y_agg * "_1")
+        #         rename!(df_agg_z, z_agg => z_agg * "_2")
+        #         (x_agg, y_agg * "_1", z_agg * "_2")
+        #     elseif x_agg == z_agg != y_agg
+        #         rename!(df_agg_x, x_agg => x_agg * "_1")
+        #         rename!(df_agg_z, z_agg => z_agg * "_2")
+        #         (x_agg * "_1", y_agg, z_agg * "_2")
+        #     else
+        #         (x_agg, y_agg, z_agg)
+        #     end
+        #     # Convert missing to "missing"
+        #     println("Set missing in df_agg_x and df_agg_y:")
+        #     @show nrow(df_agg_x)
+        #     @show nrow(df_agg_y)
+        #     @show nrow(df_agg_z)
+        #     for i in 1:nrow(df_agg_x)
+        #         for j in 1:(ncol(df_agg_x)-1)
+        #             if ismissing(df_agg_x[i, j])
+        #                 df_agg_x[i, j] = "missing"
+        #             end
+        #             if ismissing(df_agg_y[i, j])
+        #                 df_agg_y[i, j] = "missing"
+        #             end
+        #             if ismissing(df_agg_z[i, j])
+        #                 df_agg_z[i, j] = "missing"
+        #             end
+        #         end
+        #     end
+        #     # Merge
+        #     println("Leftjoining")
+        #     df_agg = leftjoin(
+        #         df_agg_x,
+        #         leftjoin(
+        #             df_agg_y, 
+        #             df_agg_z, 
+        #             on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]
+        #         ),
+        #         on=[:year, :season, :harvest, :site, :replication, :block, :row, :col, :species, :ploidy, :crop_duration, :individual_or_pool, :maternal_family, :paternal_family, :cultivar, :name, :population]
+        #     );
+        #     @show nrow(df_agg)
+
+        #     # Extract x, y, and z values
+        #     x = df_agg[!, x_agg]
+        #     y = df_agg[!, y_agg]
+        #     z = df_agg[!, z_agg]
+        #     # Set up color scheme for points
+        #     z = begin
+        #         z_new = repeat(["missing"], length(z))
+        #         idx = findall(.!ismissing.(z))
+        #         if (length(idx) > 0) && !isa(z[idx[1]], String) 
+        #             idx = findall(.!ismissing.(z) .&& .!isnan.(z) .&& .!isinf.(z))
+        #             n = if n_bins_plot_scat > length(z)
+        #                 length(z)
+        #             else
+        #                 n_bins_plot_scat
+        #             end
+        #             unique_z = percentile(
+        #                 filter(z -> !ismissing(z) && !isnan(z) && !isinf(z), z), 
+        #                 100 .* collect(0:1/n:1)
+        #             )
+        #             m1 = length(split(string(maximum(round.(unique_z))), ".")[1])
+        #             m2 = 4
+        #             for (j, z_level) in enumerate(unique_z)
+        #                 if j == 1
+        #                     continue
+        #                 end
+        #                 idx_sub = if j == 2
+        #                     # include the minimum
+        #                     filter(i -> (z[i] >= unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+        #                 else
+        #                     filter(i -> (z[i] > unique_z[j-1]) && (z[i] <= unique_z[j]), idx)
+        #                 end
+        #                 ini = begin
+        #                     ini = string((round(unique_z[j-1], digits=4)))
+        #                     join([lpad(split(ini, ".")[1], m1, "0"), rpad(split(ini, ".")[2], m2, "0")], ".")
+        #                 end
+        #                 fin = begin
+        #                     fin = string((round(unique_z[j], digits=4)))
+        #                     join([lpad(split(fin, ".")[1], m1, "0"), rpad(split(fin, ".")[2], m2, "0")], ".")
+        #                 end
+        #                 z_new[idx_sub] .= string(ini, " - ", fin)
+        #             end
+        #         else
+        #             z_new[idx] = z[idx]
+        #         end
+        #         z_new
+        #     end
+        #     # Map colours to points
+        #     unique_z = sort(unique(z))
+        #     colours_per_unique_z = try
+        #         colorschemes[selected_plot_colour_scheme_scat][1:length(unique_z)]
+        #     catch
+        #         repeat(
+        #             colorschemes[selected_plot_colour_scheme_scat][1:end], 
+        #             outer=Int(ceil(length(unique_z)/length(colorschemes[selected_plot_colour_scheme_scat])))
+        #         )[1:length(unique_z)]
+        #     end
+        #     # colours = [colours_per_unique_z[unique_z .== zi][1] for zi in z]
+        #     # Create hover text for each point
+        #     hovertext = [
+        #         join(
+        #             filter(x -> !isnothing(x) && split(x, ": ")[end] != "missing", [
+        #                 # Trials and phenomes
+        #                 "name" ∈ names(df_agg) ? string("name: ", df_agg.name[i]) : nothing,
+        #                 "population" ∈ names(df_agg) ? string("population: ", df_agg.population[i]) : nothing,
+        #                 "year" ∈ names(df_agg) ? string("year: ", df_agg.year[i]) : nothing,
+        #                 "season" ∈ names(df_agg) ? string("season: ", df_agg.season[i]) : nothing,
+        #                 "site" ∈ names(df_agg) ? string("site: ", df_agg.site[i]) : nothing,
+        #                 "harvest" ∈ names(df_agg) ? string("harvest: ", df_agg.harvest[i]) : nothing,
+        #                 "replication" ∈ names(df_agg) ? string("replication: ", df_agg.replication[i]) : nothing,
+        #                 "block" ∈ names(df_agg) ? string("block: ", df_agg.block[i]) : nothing,
+        #                 "row" ∈ names(df_agg) ? string("row: ", df_agg.row[i]) : nothing,
+        #                 "column" ∈ names(df_agg) ? string("column: ", df_agg.column[i]) : nothing,
+        #                 # CVs
+        #                 "fold" ∈ names(df_agg) ? string("fold: ", df_agg.fold[i]) : nothing,
+        #                 string(selected_plot_traits_scat_x[1], ": ", round(x[i], digits=4)),
+        #                 string(selected_plot_traits_scat_y[1], ": ", round(y[i], digits=4))
+        #             ]), "<br>"
+        #         ) for i in 1:length(x)
+        #     ]
+
+        #     # Create scatter plot for each group
+        #     plots_vector_scat = []
+        #     for (j, g) in enumerate(unique_z)
+        #         group_indices = filter(i -> z[i] == g, idx)
+        #         push!(plots_vector_scat, 
+        #             scatter(
+        #                 x=x[group_indices], 
+        #                 y=y[group_indices], 
+        #                 mode="markers", 
+        #                 opacity=0.75,
+        #                 hoverinfo="text", 
+        #                 hovertext=hovertext[group_indices],
+        #                 # marker=attr(color=colours[group_indices]), 
+        #                 name=g
+        #             )
+        #         )
+        #     end
+
+        #     # Set plot layout
+        #     plots_layout_scat = PlotlyBase.Layout(
+        #         title=string("Scatterplot of ", selected_plot_traits_scat_x[1], " vs ", selected_plot_traits_scat_y[1]),
+        #         xaxis_title=selected_plot_traits_scat_x[1],
+        #         yaxis_title=selected_plot_traits_scat_y[1],
+        #         showlegend=true,
+        #         legend=attr(title=attr(text=selected_plot_traits_scat_z[1])),
+        #         colorway=colours_per_unique_z,
+        #     )
+        #     # Update plot
+        #     Dict(
+        #         "plotdata_scat" => plots_vector_scat,
+        #         "plotlayout_scat" => plots_layout_scat,
+        #     )
+        # end
+
+
+        # # When plot button clicked, create scatter plot
+        # @in plot_table_scat = false
+        # @onbutton plot_table_scat begin
+        #     p = reactivescatter(
+        #         df,
+        #         selected_plot_traits_scat_x=selected_plot_traits_scat_x,
+        #         selected_plot_traits_scat_y=selected_plot_traits_scat_y,
+        #         selected_plot_traits_scat_z=selected_plot_traits_scat_z,
+        #         selected_agg_func_per_season_scat_x=selected_agg_func_per_season_scat_x,
+        #         selected_agg_func_per_season_scat_y=selected_agg_func_per_season_scat_y,
+        #         n_bins_plot_scat=n_bins_plot_scat,
+        #         selected_plot_colour_scheme_scat=selected_plot_colour_scheme_scat,
+        #     )
+        #     plotdata_scat = p["plotdata_scat"]
+        #     plotlayout_scat = p["plotlayout_scat"]
+        # end
+
+    #####################################################
     # Box plot functionality
     #####################################################
 
@@ -906,12 +1382,12 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         @out choices_tables_to_plot_box = ["analyses", "trials/entries"]
         
         @in selected_plot_traits_box = []
-        @out choices_plot_traits_box = names(df[3])[idx_col_start_numeric_pheno_tables:end]
+        @out choices_plot_traits_box = names(df[4])[idx_col_start_numeric_pheno_tables:end]
 
         @in selected_plot_grouping_1_box = []
-        @out choices_plot_grouping_1_box = names(df[3])
+        @out choices_plot_grouping_1_box = names(df[4])
         @in selected_plot_grouping_2_box = []
-        @out choices_plot_grouping_2_box = names(df[3])
+        @out choices_plot_grouping_2_box = names(df[4])
 
         @in n_bins_plot_grouping_1_box = 5
         @in n_bins_plot_grouping_2_box = 5
@@ -922,8 +1398,8 @@ DotEnv.load!(joinpath(homedir(), ".env"))
 
         # Create initial box plots
         plots_vector_box = []
-        x = df[3][:, "name"]
-        y = df[3][:, end]
+        x = df[4][:, "name"]
+        y = df[4][:, end]
         # Filter valid points
         idx = findall(.!ismissing.(y) .&& .!isnan.(y) .&& .!isinf.(y))
         x = x[idx]
@@ -941,7 +1417,7 @@ DotEnv.load!(joinpath(homedir(), ".env"))
             choices_plot_grouping_1_box = []
             selected_plot_grouping_2_box = []
             choices_plot_grouping_2_box = []
-            df[3] = if selected_table_to_plot_box == ["analyses"]
+            df[4] = if selected_table_to_plot_box == ["analyses"]
                 if nrow(table_query_analyses.data) == 0
                     println("No data to plot")
                     return DataFrame()
@@ -959,13 +1435,13 @@ DotEnv.load!(joinpath(homedir(), ".env"))
                 println("Unknown table selected")
                 return DataFrame()
             end
-            choices_plot_traits_box = if ncol(df[3]) == 0
+            choices_plot_traits_box = if ncol(df[4]) == 0
                 ["missing"]
             else
-                names(df[3])[idx_col_start_numeric_pheno_tables:end]
+                names(df[4])[idx_col_start_numeric_pheno_tables:end]
             end
-            choices_plot_grouping_1_box = names(df[3])
-            choices_plot_grouping_2_box = names(df[3])
+            choices_plot_grouping_1_box = names(df[4])
+            choices_plot_grouping_2_box = names(df[4])
         end
 
 
@@ -984,12 +1460,12 @@ DotEnv.load!(joinpath(homedir(), ".env"))
         )
             println("Plotting boxplot")
             plots_vector_box = []
-            x = df[3][:, selected_plot_grouping_1_box[1]]
-            y = df[3][:, selected_plot_traits_box[1]]
+            x = df[4][:, selected_plot_grouping_1_box[1]]
+            y = df[4][:, selected_plot_traits_box[1]]
             z = if selected_plot_grouping_1_box == selected_plot_grouping_2_box
                 repeat(["missing"], length(y))
             elseif length(selected_plot_grouping_2_box) > 0
-                df[3][:, selected_plot_grouping_2_box[1]]
+                df[4][:, selected_plot_grouping_2_box[1]]
             else
                 repeat(["missing"], length(y))
             end
@@ -1315,7 +1791,54 @@ function uiqueryanalyses()
 end
 
 function uisqueryentries()
+
+    filters_dict = Dict(
+        "00|Traits" => [:traits_filter_text, :traits_selected_options, :traits_filtered_options, btn("Select all", @click(:query_entries_select_all_traits), color = "primary", rounded=true, dense = true)],
+        "01|Entries" => [:entries_filter_text, :entries_selected_options, :entries_filtered_options, btn("Select all", @click(:query_entries_select_all_entries), color = "primary", rounded=true, dense = true)],
+        "02|Population" => [:populations_filter_text, :populations_selected_options, :populations_filtered_options, btn("Select all", @click(:query_entries_select_all_populations), color = "primary", rounded=true, dense = true)],
+        "03|Years" => [:years_filter_text, :years_selected_options, :years_filtered_options, btn("Select all", @click(:query_entries_select_all_years), color = "primary", rounded=true, dense = true)],
+        "04|Seasons" => [:seasons_filter_text, :seasons_selected_options, :seasons_filtered_options, btn("Select all", @click(:query_entries_select_all_seasons), color = "primary", rounded=true, dense = true)],
+        "05|Harvests" => [:harvests_filter_text, :harvests_selected_options, :harvests_filtered_options, btn("Select all", @click(:query_entries_select_all_harvests), color = "primary", rounded=true, dense = true)],
+        "06|Sites" => [:sites_filter_text, :sites_selected_options, :sites_filtered_options, btn("Select all", @click(:query_entries_select_all_sites), color = "primary", rounded=true, dense = true)],
+        "07|Individuals or pools" => [:individuals_or_pools_filter_text, :individuals_or_pools_selected_options, :individuals_or_pools_filtered_options, btn("Select all", @click(:query_entries_select_all_individuals_or_pools), color = "primary", rounded=true, dense = true)],
+        "08|Species" => [:species_filter_text, :species_selected_options, :species_filtered_options, btn("Select all", @click(:query_entries_select_all_species), color = "primary", rounded=true, dense = true)],
+        "09|Ploidies" => [:ploidies_filter_text, :ploidies_selected_options, :ploidies_filtered_options, btn("Select all", @click(:query_entries_select_all_ploidies), color = "primary", rounded=true, dense = true)],
+        "10|Crop duration" => [:crop_durations_filter_text, :crop_durations_selected_options, :crop_durations_filtered_options, btn("Select all", @click(:query_entries_select_all_crop_durations), color = "primary", rounded=true, dense = true)],
+        "11|Maternal families" => [:maternal_families_filter_text, :maternal_families_selected_options, :maternal_families_filtered_options, btn("Select all", @click(:query_entries_select_all_maternal_families), color = "primary", rounded=true, dense = true)],
+        "12|Paternal families" => [:paternal_families_filter_text, :paternal_families_selected_options, :paternal_families_filtered_options, btn("Select all", @click(:query_entries_select_all_paternal_families), color = "primary", rounded=true, dense = true)],
+        "13|Cultivars" => [:cultivars_filter_text, :cultivars_selected_options, :cultivars_filtered_options, btn("Select all", @click(:query_entries_select_all_cultivars), color = "primary", rounded=true, dense = true)],
+        "14|Replications" => [:replications_filter_text, :replications_selected_options, :replications_filtered_options, btn("Select all", @click(:query_entries_select_all_replications), color = "primary", rounded=true, dense = true)],
+        "15|Blocks" => [:blocks_filter_text, :blocks_selected_options, :blocks_filtered_options, btn("Select all", @click(:query_entries_select_all_blocks), color = "primary", rounded=true, dense = true)],
+        "16|Rows" => [:rows_filter_text, :rows_selected_options, :rows_filtered_options, btn("Select all", @click(:query_entries_select_all_rows), color = "primary", rounded=true, dense = true)],
+        "17|Columns" => [:cols_filter_text, :cols_selected_options, :cols_filtered_options, btn("Select all", @click(:query_entries_select_all_cols), color = "primary", rounded=true, dense = true)],        
+    )
+    filters = [
+        expansionitem(label=string(split(string(k), "|")[end]), expandseparator=true, [
+            textfield(
+                string(split(string(k), "|")[end]),
+                @bind(v[1]),
+                outlined=true,
+                dense=true,
+                clearable=true,
+                rounded=true,
+            ),
+            v[4],
+            Stipple.select(
+                v[2],
+                options=v[3],
+                useinput=true, 
+                multiple = true,
+                clearable = true,
+                usechips = true,
+                counter = true,
+                dense = true,
+                autofocus = true,
+            ),
+        ]) for (k, v) in sort(filters_dict)
+    ]
+
     [
+        filters...,
         btn(
             "Query",
             @click(:query_entries),
@@ -1326,345 +1849,10 @@ function uisqueryentries()
         ),
         spinner(:hourglass, color = "green", size = "3em", @iif("progress_entries == true")),
         p("\t"),
-        textfield(
-            "Traits",
-            @bind(:traits_filter_text),
-            outlined=true,
-            dense=true,
-            clearable=true,
-            rounded=true,
-        ),
-        Stipple.select(
-            :traits_selected_options,
-            options=:traits_filtered_options,
-            useinput=true, 
-            multiple = true,
-            clearable = true,
-            usechips = true,
-            counter = true,
-            dense = true,
-        ),
-        row([
-            column(size = 2, [
-                textfield(
-                    "Species",
-                    @bind(:species_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :species_selected_options,
-                    options=:species_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Ploidies",
-                    @bind(:ploidies_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :ploidies_selected_options,
-                    options=:ploidies_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Crop durations",
-                    @bind(:crop_durations_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :crop_durations_selected_options,
-                    options=:crop_durations_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Individual or pools",
-                    @bind(:individuals_or_pools_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :individuals_or_pools_selected_options,
-                    options=:individuals_or_pools_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Populations",
-                    @bind(:populations_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :populations_selected_options,
-                    options=:populations_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Maternal families",
-                    @bind(:maternal_families_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :maternal_families_selected_options,
-                    options=:maternal_families_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Paternal families",
-                    @bind(:paternal_families_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :paternal_families_selected_options,
-                    options=:paternal_families_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Cultivars",
-                    @bind(:cultivars_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :cultivars_selected_options,
-                    options=:cultivars_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-            ]),
-            column(size = 1),
-            column(size = 2, [
-                textfield(
-                    "Entries",
-                    @bind(:entries_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :entries_selected_options,
-                    options=:entries_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Years",
-                    @bind(:years_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :years_selected_options,
-                    options=:years_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Seasons",
-                    @bind(:seasons_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :seasons_selected_options,
-                    options=:seasons_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-            ]),
-            column(size = 1),
-            column(size = 2, [
-                textfield(
-                    "Harvests",
-                    @bind(:harvests_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :harvests_selected_options,
-                    options=:harvests_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Sites",
-                    @bind(:sites_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :sites_selected_options,
-                    options=:sites_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Replications",
-                    @bind(:replications_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :replications_selected_options,
-                    options=:replications_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-            ]),
-            column(size = 1),
-            column(size = 2, [
-                textfield(
-                    "Blocks",
-                    @bind(:blocks_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :blocks_selected_options,
-                    options=:blocks_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Rows",
-                    @bind(:rows_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :rows_selected_options,
-                    options=:rows_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-                textfield(
-                    "Columns",
-                    @bind(:cols_filter_text),
-                    outlined=true,
-                    dense=true,
-                    clearable=true,
-                    rounded=true,
-                ),
-                Stipple.select(
-                    :cols_selected_options,
-                    options=:cols_filtered_options,
-                    useinput=true, 
-                    multiple = true,
-                    clearable = true,
-                    usechips = true,
-                    counter = true,
-                    dense = true,
-                ),
-            ]),
-        ]),
         toggle("Include phenotype data?", :phenotype_data, color = "green", var"true-value" = "yes", var"false-value" = "no",),
         toggle("Include genotype data?", :genotype_data, color = "blue", var"true-value" = "yes", var"false-value" = "no",),
+        p("\t"),
+        btn("Clear all filters", @click(:query_entries_clear_all_filters), color = "primary", rounded=true, dense = true),
         p("\t"),
         btn("Download", icon = "download", @on(:click, :download_entries), color = "primary", nocaps = true),
         separator(color = "primary"),
@@ -1765,6 +1953,29 @@ function uiplotscat()
     ]
 end
 
+function uiplotpca()
+    [
+        row([
+            column(size=3, [Stipple.select(:selected_table_to_plot_pca, useinput=true, options = :choices_tables_to_plot_pca, label = "Table to plot"),]),
+            column(size=3, [Stipple.select(:selected_plot_traits_pca_x, useinput=true, options = :choices_plot_traits_pca_x, label = "Trait x", multiple=false, usechips=false),]),
+            column(size=3, [Stipple.select(:selected_plot_traits_pca_y, useinput=true, options = :choices_plot_traits_pca_y, label = "Trait y", multiple=false, usechips=false),]),
+            column(size=3, [Stipple.select(:selected_plot_traits_pca_z, useinput=true, options = :choices_plot_traits_pca_z, label = "Grouping", multiple=false, usechips=false),]),
+        ]),
+        row([
+            column(size=3, [Stipple.select(:selected_plot_colour_scheme_pca, useinput=true, options = :choices_plot_colour_scheme_pca, label = "Colour Scheme", multiple=false, usechips=false),]),
+            # column(size=3, [Stipple.select(:selected_agg_func_per_season_pca_x, useinput=true, options = :choices_agg_func_per_season_pca, label = "x-aggregator per season", multiple=false, usechips=false),]),
+            # column(size=3, [Stipple.select(:selected_agg_func_per_season_pca_y, useinput=true, options = :choices_agg_func_per_season_pca, label = "y-aggregator per season", multiple=false, usechips=false),]),
+        ]),
+        btn(
+            "Plot",
+            @click(:plot_table_pca),
+            loading = :plot_table_pca,
+            color = "green",
+        ),
+        StipplePlotly.plot(:plotdata_pca, layout=:plotlayout_pca, class="sync_data")
+    ]
+end
+
 function uiplotbox()
     [
         row([
@@ -1810,6 +2021,9 @@ function uiplot()
                 tab(name = "scatterplot",
                     label = "Scatterplot"
                 ),
+                tab(name = "pca",
+                    label = "PCA biplot"
+                ),
                 tab(name = "boxplot",
                     label = "Boxplot"
                 ),
@@ -1823,6 +2037,7 @@ function uiplot()
             [
                 tabpanel(name = "histogram", uiplothist()),
                 tabpanel(name = "scatterplot", uiplotscat()),
+                tabpanel(name = "pca", uiplotpca()),
                 tabpanel(name = "boxplot", uiplotbox()),
             ],
         ),

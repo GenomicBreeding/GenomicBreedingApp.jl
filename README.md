@@ -26,11 +26,13 @@ pg_ctl -D $CONDA_PREFIX/pgsql_data -l $CONDA_PREFIX/pgsql_data/logfile.txt start
 julia --project --load test/deploy.jl
 ```
 
-Or manually via:
+Or manually by first opening Julia via: 
 
 ```shell
 julia --project
 ```
+
+Then enter:
 
 ```julia
 using GenieFramework
