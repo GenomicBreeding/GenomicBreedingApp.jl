@@ -2,7 +2,7 @@ using GenieFramework
 Genie.loadapp()
 up(8001, async = true)
 
-using StatsBase, DataFrames, Tables, CSV, StippleDownloads
+using StatsBase, MultivariateStats, DataFrames, Tables, CSV, StippleDownloads
 using PlotlyBase, ColorSchemes
 using GenieFramework
 using GenomicBreedingCore, GenomicBreedingIO
